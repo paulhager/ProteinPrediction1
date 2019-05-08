@@ -33,6 +33,7 @@ def loadFastaFiles(fastaFolder):
   for filename in os.listdir(fastaFolder):
     with open(os.path.join(fastaFolder, filename), 'r') as fastaFile:
       header = fastaFile.readline()
+      header = header.strip('\n')
       sequence = fastaFile.readline()
       proteinSeqDict[header[1:]] = sequence
   return proteinSeqDict
@@ -94,19 +95,55 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
             features.append(0)
   return snapScoreDict, snapConfDict, featureDict
 
+def loadBindingResidues(bindingResiduesFile):
+    bindPosDict = {}
+    for filename in os.listdir(bindingResiduesFile):
+        with open(os.path.join(bindingResiduesFile, filename), 'r') as bindFile:
+            content = bindFile.readlines()
+            for line in content:
+                line = line.strip('\n')
+                key = line[:6]
+                val = line[7:].split(',')
+                bindPosDict[key] = val
+    return bindPosDict
+
 def createFeatureHist(featureDict):
   featureSumFrequencies = []
   for featureArrays in featureDict.values():
     for featureArray in featureArrays:
       featureSumFrequencies.append(featureArray.count(1))
+  f = plt.figure(1)
   plt.hist(x=featureSumFrequencies, bins = range(0,20), align = 'left')
   plt.xticks(range(0,20))
   plt.xticks(rotation=90)
   plt.xlabel('Feature Sum')
   plt.ylabel('Frequency')
   plt.title('Histogram of feature sum frequencies')
-  plt.savefig("featureHistogram.pdf")
+  f.savefig("featureHistogram.pdf")
+
+def pos_hist(proteinSeqDict, bindingDict):
+    matched = []
+    for i in proteinSeqDict:
+        matched.append([proteinSeqDict[i], bindingDict[i]])
+    positions = []
+    for i in matched:
+        positions = positions + i[1]
+    all_pos = []
+    for j in positions:
+        if j != '':
+            all_pos.append(int(j))
+    g = plt.figure(2)
+    plt.hist(all_pos, 100)
+    plt.title('Distribution of binding residues between sequence positions')
+    plt.xlabel('Position in sequence')
+    plt.ylabel('Number of binding residues')
+    g.savefig('positionHistogram.pdf')
+
+
 
 proteinSeqDict = loadFastaFiles(fastaFolder)
 snapScoreDict, snapConfDict, featureDict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
 createFeatureHist(featureDict)
+
+bindingDict = loadBindingResidues(bindingResiduesFile)
+pos_hist(proteinSeqDict, bindingDict)
