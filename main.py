@@ -122,9 +122,7 @@ def createFeatureHist(featureDict):
   f.savefig("featureHistogram.pdf")
 
 def pos_hist(proteinSeqDict, bindingDict):
-    matched = []
-    for i in proteinSeqDict:
-        matched.append([proteinSeqDict[i], bindingDict[i]])
+    matched = matchmaker(proteinSeqDict, bindingDict)
     positions = []
     for i in matched:
         positions = positions + i[1]
@@ -140,6 +138,38 @@ def pos_hist(proteinSeqDict, bindingDict):
     g.savefig('positionHistogram.pdf')
 
 
+def matchmaker(proteinSeqDict, bindingDict):
+    matched = []
+    for i in proteinSeqDict:
+        matched.append([proteinSeqDict[i], bindingDict[i]])
+    return matched
+
+def bindCount(proteinSeqDict, bindingDict):
+    matched = matchmaker(proteinSeqDict, bindingDict)
+    y = []
+    x = []
+    for i in matched:
+        x.append(len(i[1]))
+        y.append(len(i[0]))
+    h = plt.figure(3)
+    plt.plot(y, x, 'ro')
+    plt.title('Number of binding residues per sequence length')
+    plt.xlabel('Sequence length')
+    plt.ylabel('Number of binding residues')
+    h.savefig('seqLenBindNumDotplot.pdf')
+
+def tot_lens(proteinSeqDict, bindingDict):
+    matched = matchmaker(proteinSeqDict, bindingDict)
+    total_len = [0,0]
+    for i in range(len(matched)):
+        total_len[0] = total_len[0] + len(matched[i][0])
+        total_len[1] = total_len[1] + len(matched[i][1])
+    nonbind = total_len[0] - total_len[1]
+    k = plt.figure(4)
+    labels = 'binding_residues', 'non-binding residues'
+    plt.pie([total_len[1], nonbind], labels=labels,startangle=90, autopct='%1.1f%%')
+    plt.axis('equal')
+    k.savefig('lengthPie.pdf')
 
 proteinSeqDict = loadFastaFiles(fastaFolder)
 snapScoreDict, snapConfDict, featureDict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
@@ -147,3 +177,5 @@ createFeatureHist(featureDict)
 
 bindingDict = loadBindingResidues(bindingResiduesFile)
 pos_hist(proteinSeqDict, bindingDict)
+bindCount(proteinSeqDict, bindingDict)
+tot_lens(proteinSeqDict, bindingDict)
