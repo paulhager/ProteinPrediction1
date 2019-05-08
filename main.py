@@ -26,10 +26,10 @@ def loadFastaFiles(fastaFolder):
 
 def loadSnapFiles(snapFolder):
   aaOrder = ['A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
-  aaIndex = 0
   snapScoreDict = {}
   snapConfDict = {}
   for filename in os.listdir(snapFolder):
+    aaIndex = 0
     proteinID = os.path.basename(filename)[:-6]
     snapScoreDict[proteinID] = []
     snapConfDict[proteinID] = []
@@ -56,7 +56,7 @@ def loadSnapFiles(snapFolder):
             aaIndex = 0
         else:
           posAAscores.append(score)
-  return snapScoreDict
+  return snapScoreDict, snapConfDict
 
 
 def calcFeatureLists(proteinSeqDict, snapScoreDict):
@@ -69,5 +69,5 @@ def calcFeatureLists(proteinSeqDict, snapScoreDict):
 
 
 proteinSeqDict = loadFastaFiles(fastaFolder)
-snapScoreDict = loadSnapFiles(snapFolder)
+snapScoreDict, snapConfDict = loadSnapFiles(snapFolder)
 featureLists = calcFeatureLists(proteinSeqDict, snapScoreDict)
