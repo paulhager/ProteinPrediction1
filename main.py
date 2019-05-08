@@ -28,27 +28,34 @@ def loadSnapFiles(snapFolder):
   aaOrder = ['A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
   aaIndex = 0
   snapScoreDict = {}
+  snapConfDict = {}
   for filename in os.listdir(snapFolder):
     proteinID = os.path.basename(filename)[:-6]
     snapScoreDict[proteinID] = []
+    snapConfDict[proteinID] = []
+    posAAscores = []
+    posAAconf = []
     with open(os.path.join(snapFolder, filename), 'r') as snapFile:
       for line in snapFile:
-        m = re.search(r"^(.*?)\s", line)
-        if m:
-          posAAid = m.group(1)
-          if aaOrder.index(posAAid[0]) == aaIndex:
+        posAAid = line[0]
+        if aaOrder.index(posAAid[0]) == aaIndex:
+          aaIndex += 1
+          posAAscores.append(None)
+          posAAconf.append(None)
+        splitLine = line.split()
+        score = splitLine[len(splitLine)-1]
+        if len(posAAscores) > len(posAAconf):
+          posAAconf.append(score)
+          if aaIndex < 19:
             aaIndex += 1
-            snapScoreDict[proteinID].append(None)
-            continue
-          m = re.search(r"score = (.*)", line)
-          if m:
-            score = m.group(1)
-            snapScoreDict[proteinID].append(score)
-            if aaIndex != 19:
-              aaIndex += 1
-            else:
-              posAAscores = []
-              aaIndex = 0
+          else:
+            snapScoreDict[proteinID].append(posAAscores)
+            snapConfDict[proteinID].append(posAAconf)
+            posAAscores = []
+            posAAconf = []
+            aaIndex = 0
+        else:
+          posAAscores.append(score)
   return snapScoreDict
 
 
@@ -56,8 +63,6 @@ def calcFeatureLists(proteinSeqDict, snapScoreDict):
   print(len(proteinSeqDict))
   print(len(snapScoreDict))
   print(len(snapScoreDict['P12733']))
-  print(snapScoreDict['P12733'][4])
-  print(snapScoreDict['P12733'][5])
 
   featureLists = []
   return featureLists
