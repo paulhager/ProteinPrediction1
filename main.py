@@ -112,8 +112,9 @@ def loadBindingResidues(bindingResiduesFile):
         content = bindFile.readlines()
         for line in content:
             line = line.strip('\n')
-            key = line[:6]
-            val = line[7:].split(',')
+            fields = line.split()
+            key = fields[0]
+            val = fields[1].split(',')
             bindPosDict[key] = val
     return bindPosDict
 
@@ -193,10 +194,11 @@ def tot_lens(proteinSeqDict, bindingDict):
     plt.axis('equal')
     k.savefig('lengthPie.pdf')
 
+bindingDict = loadBindingResidues(bindingResiduesFile)
 proteinSeqDict = loadFastaFiles(fastaFolder)
 snapScoreDict, snapConfDict, featureDict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
-bindingDict = loadBindingResidues(bindingResiduesFile)
 train, train_labels = prepareData(featureDict, bindingDict)
+print(len(train))
 print(train[1])
 print(train[2])
 print(train[3])
