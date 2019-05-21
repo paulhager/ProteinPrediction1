@@ -1,5 +1,5 @@
 import argparse
-import matplotlib.pyplot as plt # pylint: disable=import-error
+#import matplotlib.pyplot as plt # pylint: disable=import-error
 import os
 import ntpath
 import re
@@ -73,6 +73,17 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
           posAAconf.append(score)
           if aaIndex < 19:
             aaIndex += 1
+            if(aaIndex == posAAindex == 19):
+                posAAscores.append(None)
+                posAAconf.append(None)
+                features.append(None)
+                snapScoreDict[proteinID].append(posAAscores)
+                snapConfDict[proteinID].append(posAAconf)
+                featureDict[proteinID].append(features)
+                posAAscores = []
+                posAAconf = []
+                features = []
+                aaIndex = 0
           else:
             snapScoreDict[proteinID].append(posAAscores)
             snapConfDict[proteinID].append(posAAconf)
@@ -97,15 +108,26 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
 
 def loadBindingResidues(bindingResiduesFile):
     bindPosDict = {}
-    for filename in os.listdir(bindingResiduesFile):
-        with open(os.path.join(bindingResiduesFile, filename), 'r') as bindFile:
-            content = bindFile.readlines()
-            for line in content:
-                line = line.strip('\n')
-                key = line[:6]
-                val = line[7:].split(',')
-                bindPosDict[key] = val
+    with open(bindingResiduesFile, 'r') as bindFile:
+        content = bindFile.readlines()
+        for line in content:
+            line = line.strip('\n')
+            key = line[:6]
+            val = line[7:].split(',')
+            bindPosDict[key] = val
     return bindPosDict
+
+def prepareData(featureDict, bindingDict):
+    train = []
+    train_labels = []
+    for protein in bindingDict:
+        if protein in featureDict:
+            proteinFeaturesByPos = featureDict[protein]
+            for aaPos in range(len(proteinFeaturesByPos)):
+                train_labels.append(protein+"_"+str(aaPos))
+                train.append(proteinFeaturesByPos[aaPos])
+    return train, train_labels
+
 
 def createFeatureHist(featureDict):
   featureSumFrequencies = []
@@ -137,11 +159,11 @@ def pos_hist(proteinSeqDict, bindingDict):
     plt.ylabel('Number of binding residues')
     g.savefig('positionHistogram.pdf')
 
-
 def matchmaker(proteinSeqDict, bindingDict):
     matched = []
     for i in proteinSeqDict:
-        matched.append([proteinSeqDict[i], bindingDict[i]])
+        if i in bindingDict:
+                matched.append([proteinSeqDict[i], bindingDict[i]])
     return matched
 
 def bindCount(proteinSeqDict, bindingDict):
@@ -173,9 +195,17 @@ def tot_lens(proteinSeqDict, bindingDict):
 
 proteinSeqDict = loadFastaFiles(fastaFolder)
 snapScoreDict, snapConfDict, featureDict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
-createFeatureHist(featureDict)
-
 bindingDict = loadBindingResidues(bindingResiduesFile)
-pos_hist(proteinSeqDict, bindingDict)
-bindCount(proteinSeqDict, bindingDict)
-tot_lens(proteinSeqDict, bindingDict)
+train, train_labels = prepareData(featureDict, bindingDict)
+print(train[1])
+print(train[2])
+print(train[3])
+print(train[4])
+print(train_labels[1])
+print(train_labels[2])
+print(train_labels[3])
+print(train_labels[4])
+#createFeatureHist(featureDict)
+#pos_hist(proteinSeqDict, bindingDict)
+#bindCount(proteinSeqDict, bindingDict)
+#tot_lens(proteinSeqDict, bindingDict)
