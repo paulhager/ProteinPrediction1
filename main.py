@@ -3,7 +3,8 @@ import argparse
 import os
 import ntpath
 import re
-import NeuralNetwork
+import NeuralNetwork # pylint: disable=import-error
+import torch
 from Bio.SubsMat import MatrixInfo as matrices
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
@@ -44,15 +45,18 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
   snapScoreDict = {}
   snapConfDict = {}
   featureDict = {}
+  feature2Dict = {}
   for filename in os.listdir(snapFolder):
     aaIndex = 0
     proteinID = os.path.basename(filename)[:-6]
     snapScoreDict[proteinID] = []
     snapConfDict[proteinID] = []
     featureDict[proteinID] = []
+    feature2Dict[proteinID] = []
     posAAscores = []
     posAAconf = []
     features = []
+    features2 = []
     with open(os.path.join(snapFolder, filename), 'r') as snapFile:
       for line in snapFile:
         splitLine = line.split()
@@ -67,6 +71,8 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
           posAAscores.append(0)
           posAAconf.append(0)
           features.append(0)
+          features2.append(0)
+          features2.append(0)
         if score[-1] == '%':
           score = score[:-1]
         score = int(score)
@@ -78,20 +84,26 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
                 posAAscores.append(0)
                 posAAconf.append(0)
                 features.append(0)
+                features2.append(0)
+                features2.append(0)
                 snapScoreDict[proteinID].append(posAAscores)
                 snapConfDict[proteinID].append(posAAconf)
                 featureDict[proteinID].append(features)
+                feature2Dict[proteinID].append(features2)
                 posAAscores = []
                 posAAconf = []
                 features = []
+                features2 = []
                 aaIndex = 0
           else:
             snapScoreDict[proteinID].append(posAAscores)
             snapConfDict[proteinID].append(posAAconf)
             featureDict[proteinID].append(features)
+            feature2Dict[proteinID].append(features2)
             posAAscores = []
             posAAconf = []
             features = []
+            features2 = []
             aaIndex = 0
         else:
           posAAscores.append(score)
@@ -101,11 +113,13 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
           else:
             firstAA = posAAid
             secondAA = mutAAid
+          features2.append(score)
+          features2.append(blosum62[(firstAA, secondAA)])
           if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
             features.append(1)
           else:
             features.append(-1)
-  return snapScoreDict, snapConfDict, featureDict
+  return snapScoreDict, snapConfDict, featureDict, feature2Dict
 
 def loadBindingResidues(bindingResiduesFile):
     bindPosDict = {}
@@ -119,19 +133,25 @@ def loadBindingResidues(bindingResiduesFile):
             bindPosDict[key] = val
     return bindPosDict
 
-def prepareData(featureDict, bindingDict):
+def prepareData(featureDict, feature2Dict, bindingDict):
     train = []
+    train2 = []
     train_labels = []
     for protein in bindingDict:
         if protein in featureDict:
             proteinFeaturesByPos = featureDict[protein]
+            proteinFeatures2ByPos = feature2Dict[protein]
             for aaPos in range(len(proteinFeaturesByPos)):
-              if aaPos in bindingDict[protein]:
-                train_labels.append(1)
+              #print(aaPos+1)
+              #print(bindingDict[protein])
+              if str(aaPos+1) in bindingDict[protein]:
+                train_labels.append([1])
+                #print("!IN!")
               else:
-                train_labels.append(0)
+                train_labels.append([0])
               train.append(proteinFeaturesByPos[aaPos])
-    return train, train_labels
+              train2.append(proteinFeatures2ByPos[aaPos])
+    return train, train2, train_labels
 
 
 def createFeatureHist(featureDict):
@@ -200,18 +220,27 @@ def tot_lens(proteinSeqDict, bindingDict):
 
 bindingDict = loadBindingResidues(bindingResiduesFile)
 proteinSeqDict = loadFastaFiles(fastaFolder)
-snapScoreDict, snapConfDict, featureDict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
-train, train_labels = prepareData(featureDict, bindingDict)
-print(len(train))
-print(train[1])
-print(train[2])
-print(train[3])
-print(train[4])
-print(train_labels[1])
-print(train_labels[2])
-print(train_labels[3])
-print(train_labels[4])
-#createFeatureHist(featureDict)
-#pos_hist(proteinSeqDict, bindingDict)
-#bindCount(proteinSeqDict, bindingDict)
-#tot_lens(proteinSeqDict, bindingDict)
+snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
+train, train2, train_labels = prepareData(featureDict, feature2Dict, bindingDict)
+print("Finished preparing data")
+NN = NeuralNetwork.Neural_Network()
+trainTensors = torch.tensor(train, dtype=torch.float)
+train2Tensors = torch.tensor(train2, dtype=torch.float)
+labelTensors = torch.tensor(train_labels, dtype=torch.float)
+
+#for x in range(len(train)):  # trains the NN 1,000 times
+#  i = torch.tensor([train[x]], dtype=torch.float)
+#  o = torch.tensor(train_labels[x], dtype=torch.float)
+#  print ("#" + str(x) + " Loss: " + str(torch.mean((o - NN(i))**2).detach().item()))  # mean sum squared loss
+#  NN.train(i, o)
+
+
+for i in range(100):  # trains the NN 1,000 times
+  #print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
+  #NN.train(trainTensors, labelTensors)
+  print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(train2Tensors))**2).detach().item()))  # mean sum quared loss
+  NN.train(train2Tensors, labelTensors)
+
+NN.saveWeights(NN)
+#NN.predict(bindVals=train[54], nonBindVals=train[55])
+NN.predict(bindVals=train2[54], nonBindVals=train2[55])
