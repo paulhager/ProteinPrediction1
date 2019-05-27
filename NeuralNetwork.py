@@ -7,7 +7,7 @@ class Neural_Network(nn.Module):
         # parameters
         # TODO: parameters can be parameterized instead of declaring them here
         #self.inputSize = 20
-        self.inputSize = 40
+        self.inputSize = 20
         self.outputSize = 1
         self.hiddenSize = 100
         

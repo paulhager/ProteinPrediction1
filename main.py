@@ -5,18 +5,23 @@ import ntpath
 import re
 import NeuralNetwork # pylint: disable=import-error
 import torch
+import pickle
 from Bio.SubsMat import MatrixInfo as matrices
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
 parser.add_argument('--snapFolder', help = "Path to folder containing snap files", type = str)
 parser.add_argument('--bindingResidues', help = "Path to binding residues files", type = str)
+parser.add_argument('--pickleTrain', help = "Path to pickle file with train data structures", type=str)
+parser.add_argument('--pickleLabel', help = "Path to pickle file with label data structures", type=str)
 
 args = parser.parse_args()
 
 fastaFolder = args.fastaFolder
 snapFolder = args.snapFolder
 bindingResiduesFile = args.bindingResidues
+pickleFileTrain = args.pickleTrain
+pickleFileLabel = args.pickleLabel
 
 blosum62 = matrices.blosum62
 blosumCutoffsDict = {
@@ -218,15 +223,30 @@ def tot_lens(proteinSeqDict, bindingDict):
     plt.axis('equal')
     k.savefig('lengthPie.pdf')
 
-bindingDict = loadBindingResidues(bindingResiduesFile)
-proteinSeqDict = loadFastaFiles(fastaFolder)
-snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
-train, train2, train_labels = prepareData(featureDict, feature2Dict, bindingDict)
+if pickleFileTrain and pickleFileLabel:
+  with open (pickleFileTrain, 'rb') as pft:
+    train = pickle.load(pft)
+  with open (pickleFileLabel, 'rb') as pfl:
+    train_labels = pickle.load(pfl)
+else:
+  bindingDict = loadBindingResidues(bindingResiduesFile)
+  proteinSeqDict = loadFastaFiles(fastaFolder)
+  snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
+  train, train2, train_labels = prepareData(featureDict, feature2Dict, bindingDict)
+  with open('train.pickle', 'wb',) as handle:
+    pickle.dump(train, handle, protocol=pickle.HIGHEST_PROTOCOL)
+  with open('train2.pickle', 'wb',) as handle:
+    pickle.dump(train2, handle, protocol=pickle.HIGHEST_PROTOCOL)
+  with open('labels.pickle', 'wb',) as handle:
+    pickle.dump(train_labels, handle, protocol=pickle.HIGHEST_PROTOCOL)
+  train = train2
+
+
 print("Finished preparing data")
 NN = NeuralNetwork.Neural_Network()
 trainTensors = torch.tensor(train, dtype=torch.float)
-train2Tensors = torch.tensor(train2, dtype=torch.float)
 labelTensors = torch.tensor(train_labels, dtype=torch.float)
+
 
 #for x in range(len(train)):  # trains the NN 1,000 times
 #  i = torch.tensor([train[x]], dtype=torch.float)
@@ -236,11 +256,8 @@ labelTensors = torch.tensor(train_labels, dtype=torch.float)
 
 
 for i in range(100):  # trains the NN 1,000 times
-  #print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
-  #NN.train(trainTensors, labelTensors)
-  print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(train2Tensors))**2).detach().item()))  # mean sum quared loss
-  NN.train(train2Tensors, labelTensors)
+  print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
+  NN.train(trainTensors, labelTensors)
 
 NN.saveWeights(NN)
-#NN.predict(bindVals=train[54], nonBindVals=train[55])
-NN.predict(bindVals=train2[54], nonBindVals=train2[55])
+NN.predict(bindVals=train[54], nonBindVals=train[55])
