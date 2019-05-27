@@ -3,6 +3,7 @@ import argparse
 import os
 import ntpath
 import re
+import NeuralNetwork
 from Bio.SubsMat import MatrixInfo as matrices
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
@@ -63,9 +64,9 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
         mutAAindex = aaOrder.index(mutAAid)
         if posAAindex == aaIndex:
           aaIndex += 1
-          posAAscores.append(None)
-          posAAconf.append(None)
-          features.append(None)
+          posAAscores.append(0)
+          posAAconf.append(0)
+          features.append(0)
         if score[-1] == '%':
           score = score[:-1]
         score = int(score)
@@ -74,9 +75,9 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
           if aaIndex < 19:
             aaIndex += 1
             if(aaIndex == posAAindex == 19):
-                posAAscores.append(None)
-                posAAconf.append(None)
-                features.append(None)
+                posAAscores.append(0)
+                posAAconf.append(0)
+                features.append(0)
                 snapScoreDict[proteinID].append(posAAscores)
                 snapConfDict[proteinID].append(posAAconf)
                 featureDict[proteinID].append(features)
@@ -103,7 +104,7 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
           if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
             features.append(1)
           else:
-            features.append(0)
+            features.append(-1)
   return snapScoreDict, snapConfDict, featureDict
 
 def loadBindingResidues(bindingResiduesFile):
@@ -125,8 +126,11 @@ def prepareData(featureDict, bindingDict):
         if protein in featureDict:
             proteinFeaturesByPos = featureDict[protein]
             for aaPos in range(len(proteinFeaturesByPos)):
-                train_labels.append(protein+"_"+str(aaPos))
-                train.append(proteinFeaturesByPos[aaPos])
+              if aaPos in bindingDict[protein]:
+                train_labels.append(1)
+              else:
+                train_labels.append(0)
+              train.append(proteinFeaturesByPos[aaPos])
     return train, train_labels
 
 
