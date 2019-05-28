@@ -239,6 +239,8 @@ else:
     pickle.dump(train2, handle, protocol=pickle.HIGHEST_PROTOCOL)
   with open('labels.pickle', 'wb',) as handle:
     pickle.dump(train_labels, handle, protocol=pickle.HIGHEST_PROTOCOL)
+  # train = with cutoff
+  # train2 = raw data (blosum & SNAP2)
   train = train2
 
 
@@ -255,7 +257,7 @@ labelTensors = torch.tensor(train_labels, dtype=torch.float)
 #  NN.train(i, o)
 
 
-for i in range(100):  # trains the NN 1,000 times
+for i in range(200):  # trains the NN 1,000 times
   print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
   NN.train(trainTensors, labelTensors)
 
