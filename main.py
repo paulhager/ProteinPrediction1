@@ -5,6 +5,7 @@ import ntpath
 import re
 import NeuralNetwork # pylint: disable=import-error
 import torch
+from torch.utils.data import Dataset, DataLoader, TensorDataset
 import pickle
 from Bio.SubsMat import MatrixInfo as matrices
 
@@ -223,32 +224,113 @@ def tot_lens(proteinSeqDict, bindingDict):
     plt.axis('equal')
     k.savefig('lengthPie.pdf')
 
+def calc_roc(test_pred, test_labels):
+  tp = 0
+  fp = 0
+  tn = 0
+  fn = 0
+  cutoff = 0.4
+  for i, pred in enumerate(test_pred):
+    if pred.item() > cutoff and test_labels[i][0] == 1:
+      tp = tp + 1
+    elif pred.item() > cutoff:
+      fp = fp + 1
+    elif test_labels[i][0] == 1:
+      fn = fn + 1
+    else:
+      tn = tn + 1
+  return tp, fp, tn, fn
+
+
 if pickleFileTrain and pickleFileLabel:
   with open (pickleFileTrain, 'rb') as pft:
     train = pickle.load(pft)
   with open (pickleFileLabel, 'rb') as pfl:
-    train_labels = pickle.load(pfl)
+    labels = pickle.load(pfl)
 else:
   bindingDict = loadBindingResidues(bindingResiduesFile)
   proteinSeqDict = loadFastaFiles(fastaFolder)
   snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
-  train, train2, train_labels = prepareData(featureDict, feature2Dict, bindingDict)
+  train, train2, labels = prepareData(featureDict, feature2Dict, bindingDict)
   with open('train.pickle', 'wb',) as handle:
     pickle.dump(train, handle, protocol=pickle.HIGHEST_PROTOCOL)
   with open('train2.pickle', 'wb',) as handle:
     pickle.dump(train2, handle, protocol=pickle.HIGHEST_PROTOCOL)
   with open('labels.pickle', 'wb',) as handle:
-    pickle.dump(train_labels, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    pickle.dump(labels, handle, protocol=pickle.HIGHEST_PROTOCOL)
   # train = with cutoff
   # train2 = raw data (blosum & SNAP2)
   train = train2
 
 
+
+device = torch.device('cpu')
+
 print("Finished preparing data")
 NN = NeuralNetwork.Neural_Network()
-trainTensors = torch.tensor(train, dtype=torch.float)
+
+print(len(train))
+train_data = train[:10000]
+train_labels = labels[:10000]
+test_data = train[10000:]
+test_labels = labels[10000:]
+
+trainTensors = torch.tensor(train_data, dtype=torch.float)
 labelTensors = torch.tensor(train_labels, dtype=torch.float)
 
+train_and_labels = TensorDataset(trainTensors, labelTensors)
+trainloader = DataLoader(train_and_labels, batch_size=500, shuffle=True)
+
+D_in, H, D_out = 40, 200, 1
+
+model = torch.nn.Sequential(
+          torch.nn.Linear(D_in, H),
+          torch.nn.Sigmoid(),
+          torch.nn.Linear(H, D_out),
+          torch.nn.Sigmoid()
+        ).to(device)
+
+weights = torch.tensor([0.08, 0.92])
+loss_fn = torch.nn.BCELoss(reduction='mean')
+
+learning_rate = 1e-5
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+for t in range(200):
+  for i, data in enumerate(trainloader):
+    train_batch, labels_batch = data
+    y_pred = model(train_batch)
+    loss = loss_fn(y_pred, labels_batch)
+    print(t, loss.item())
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+testDataTensors = torch.tensor(test_data, dtype=torch.float)
+labelTensors = torch.tensor(test_labels, dtype=torch.float)
+test_pred = model(testDataTensors)
+tp, fp, tn, fn = calc_roc(test_pred, test_labels)
+print("TPR: "+str(tp/(tp+fn)))
+print("FPR: "+str(fp/(fp+tn)))
+print("Precision: "+str(tp/(tp+fp)))
+print("Recall: "+str(tp/(tp+fn)))
+
+#for t in range(500):
+#  y_pred = model(trainTensors)
+#  loss = loss_fn(y_pred, labelTensors)
+#  print(t, loss.item())
+#  optimizer.zero_grad()
+#  loss.backward()
+#  optimizer.step()
+
+#bindTest = torch.tensor((train[54]), dtype=torch.float)
+#nonBindTest = torch.tensor((train[55]), dtype=torch.float)
+#print ("Predicted data binding site: ")
+#print ("Input (scaled): \n" + str(bindTest))
+#print ("Output: \n" + str(model(bindTest)))
+#print ("-------")
+#print ("Predicted data non-binding site: ")
+#print ("Input (scaled): \n" + str(nonBindTest))
+#print ("Output: \n" + str(model(nonBindTest)))
 
 #for x in range(len(train)):  # trains the NN 1,000 times
 #  i = torch.tensor([train[x]], dtype=torch.float)
@@ -257,9 +339,9 @@ labelTensors = torch.tensor(train_labels, dtype=torch.float)
 #  NN.train(i, o)
 
 
-for i in range(200):  # trains the NN 1,000 times
-  print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
-  NN.train(trainTensors, labelTensors)
+#for i in range(400):  # trains the NN 1,000 times
+#  print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
+#  NN.train(trainTensors, labelTensors)
 
-NN.saveWeights(NN)
-NN.predict(bindVals=train[54], nonBindVals=train[55])
+#NN.saveWeights(NN)
+#NN.predict(bindVals=train[54], nonBindVals=train[55])
