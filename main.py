@@ -15,6 +15,8 @@ weightNonbinding = 0.08
 weightBinding = 0.92
 learning_rate = 1e-5
 epochs = 200
+device = torch.device('cpu')
+#device = torch.device('cuda')
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
@@ -268,10 +270,6 @@ else:
   # train = with cutoff
   # train2 = raw data (blosum & SNAP2)
   train = train2
-
-
-
-device = torch.device('cpu')
 
 print("Finished preparing data")
 NN = NeuralNetwork.Neural_Network()
