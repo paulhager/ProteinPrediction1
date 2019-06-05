@@ -7,16 +7,19 @@ import NeuralNetwork # pylint: disable=import-error
 import torch
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 import pickle
+import math
 from Bio.SubsMat import MatrixInfo as matrices
+import time
 
+timer = time.time()
 batchSize = 500
 hiddenLayers = 200
-weightNonbinding = 0.08
-weightBinding = 0.92
+weightNonbinding = 0.4
+weightBinding = 0.6
 learning_rate = 1e-5
 epochs = 200
 device = torch.device('cpu')
-#device = torch.device('cuda')
+# device = torch.device('cuda')
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
@@ -280,8 +283,8 @@ train_labels = labels[:100000]
 test_data = train[100000:]
 test_labels = labels[100000:]
 
-trainTensors = torch.tensor(train_data, dtype=torch.float)
-labelTensors = torch.tensor(train_labels, dtype=torch.float)
+trainTensors = torch.tensor(train_data, dtype=torch.float, device=device)
+labelTensors = torch.tensor(train_labels, dtype=torch.float, device=device)
 
 train_and_labels = TensorDataset(trainTensors, labelTensors)
 trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
@@ -304,20 +307,33 @@ for t in range(epochs):
   for i, data in enumerate(trainloader):
     train_batch, labels_batch = data
     y_pred = model(train_batch)
+    loss_fn.weight = weights[labels_batch.long()]
     loss = loss_fn(y_pred, labels_batch)
     print(t, loss.item())
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
 
-testDataTensors = torch.tensor(test_data, dtype=torch.float)
-labelTensors = torch.tensor(test_labels, dtype=torch.float)
+testDataTensors = torch.tensor(test_data, dtype=torch.float, device=device)
+labelTensors = torch.tensor(test_labels, dtype=torch.float, device=device)
 test_pred = model(testDataTensors)
 tp, fp, tn, fn = calc_roc(test_pred, test_labels)
-print("TPR: "+str(tp/(tp+fn)))
-print("FPR: "+str(fp/(fp+tn)))
-print("Precision: "+str(tp/(tp+fp)))
-print("Recall: "+str(tp/(tp+fn)))
+print("tp: ", tp, "tn: ", tn, "fp: ", fp, "fn: ", fn)
+if tp + fn > 0:
+    print("TPR: "+str(tp/(tp+fn)))
+if fp + tn > 0:
+    print("FPR: "+str(fp/(fp+tn)))
+if tp + fp > 0:
+    print("Precision: "+str(tp/(tp+fp)))
+if tp + fn > 0:
+    print("Recall: "+str(tp/(tp+fn)))
+if math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) > 0:
+    mcc = (tp * tn - fp * fn)/math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    print("MCC: " + str(mcc))
+
+
+runtime = time.time() - timer
+print("Runtime: ", runtime)
 
 #for t in range(500):
 #  y_pred = model(trainTensors)
