@@ -1,7 +1,7 @@
 import argparse
 import matplotlib.pyplot as plt # pylint: disable=import-error
 import os
-import NeuralNetwork # pylint: disable=import-error
+#import NeuralNetwork # pylint: disable=import-error
 import torch
 import pickle
 from torch.utils import data
@@ -254,9 +254,11 @@ def predict(model, bindVals, nonBindVals):
         
 print("Finished preparing data")
 #NN = NeuralNetwork.Neural_Network(20,1,1000)
-trainTensors = torch.tensor(train).float()
-labelTensors = torch.tensor(train_labels).float()
+trainTensors = torch.tensor(train[:100000]).float()
+labelTensors = torch.tensor(train_labels[:100000]).float()
 
+val_Tensors = torch.tensor(train).float()
+val_label_Tensors = torch.tensor(train_labels[100000:]).float()
 
 #for x in range(len(train)):  # trains the NN 1,000 times
 #  i = torch.tensor([train[x]], dtype=torch.float)
@@ -276,14 +278,19 @@ labelTensors = torch.tensor(train_labels).float()
 NN = TwoLayerNet(20,100,1)
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
-params = {'batch_size': 100,
+batch_size = 100
+params = {'batch_size': batch_size,
       'shuffle': True,
       'num_workers': 0}
-dataset = Dataset(train,train_labels)
+dataset = Dataset(train[:100000],train_labels[:100000])
+val_dataset = Dataset(train[100000:],train_labels[100000:])
+
 training_generator = data.DataLoader(dataset, **params)
+validation_generator = data.DataLoader(dataset, **params)
+
 optimizer = torch.optim.Adam(NN.parameters(), lr=0.000001)
 criterion = torch.nn.MSELoss(reduction='sum')
-for epoch in range(75):
+for epoch in range(20):
     for local_batch, local_labels in training_generator:
         local_batch, local_labels = local_batch.to(device), local_labels.to(device)
         #print ("#" + str(epoch) + " Loss: " + str(torch.mean((local_labels - NN(local_batch))**2).detach().item()))  # mean sum quared loss
@@ -294,6 +301,14 @@ for epoch in range(75):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        
+n = 0
+accr_batch = 0
+threshold = 0.2
+for local_batch, local_labels in validation_generator:  
+    n += 1
+    i = int(((NN(local_batch) > threshold) == local_labels.byte()).sum())
+    accr_batch += int(i)/batch_size    
+accr = accr_batch/n
+print('Net accuracy is:',accr)
 #NN.saveWeights(NN)
 predict(NN, train[54], train[55]) 
