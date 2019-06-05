@@ -9,6 +9,13 @@ from torch.utils.data import Dataset, DataLoader, TensorDataset
 import pickle
 from Bio.SubsMat import MatrixInfo as matrices
 
+batchSize = 500
+hiddenLayers = 200
+weightNonbinding = 0.08
+weightBinding = 0.92
+learning_rate = 1e-5
+epochs = 200
+
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
 parser.add_argument('--snapFolder', help = "Path to folder containing snap files", type = str)
@@ -270,18 +277,18 @@ print("Finished preparing data")
 NN = NeuralNetwork.Neural_Network()
 
 print(len(train))
-train_data = train[:10000]
-train_labels = labels[:10000]
-test_data = train[10000:]
-test_labels = labels[10000:]
+train_data = train[:100000]
+train_labels = labels[:100000]
+test_data = train[100000:]
+test_labels = labels[100000:]
 
 trainTensors = torch.tensor(train_data, dtype=torch.float)
 labelTensors = torch.tensor(train_labels, dtype=torch.float)
 
 train_and_labels = TensorDataset(trainTensors, labelTensors)
-trainloader = DataLoader(train_and_labels, batch_size=500, shuffle=True)
+trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
 
-D_in, H, D_out = 40, 200, 1
+D_in, H, D_out = 40, hiddenLayers, 1
 
 model = torch.nn.Sequential(
           torch.nn.Linear(D_in, H),
@@ -290,12 +297,12 @@ model = torch.nn.Sequential(
           torch.nn.Sigmoid()
         ).to(device)
 
-weights = torch.tensor([0.08, 0.92])
+weights = torch.tensor([weightNonbinding, weightBinding])
 loss_fn = torch.nn.BCELoss(reduction='mean')
 
-learning_rate = 1e-5
+
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-for t in range(200):
+for t in range(epochs):
   for i, data in enumerate(trainloader):
     train_batch, labels_batch = data
     y_pred = model(train_batch)
