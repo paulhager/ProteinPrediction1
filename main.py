@@ -8,15 +8,18 @@ import torch
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 import pickle
 from Bio.SubsMat import MatrixInfo as matrices
+import math
 
-batchSize = 500
+batchSize = 1000
 hiddenLayers = 200
-weightNonbinding = 0.08
-weightBinding = 0.92
+weightNonbinding = 0.4
+weightBinding = 0.6
 learning_rate = 1e-5
 epochs = 200
 device = torch.device('cpu')
+crossValidation = True
 #device = torch.device('cuda')
+modelPath = "initialModel"
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
@@ -274,18 +277,6 @@ else:
 print("Finished preparing data")
 NN = NeuralNetwork.Neural_Network()
 
-print(len(train))
-train_data = train[:100000]
-train_labels = labels[:100000]
-test_data = train[100000:]
-test_labels = labels[100000:]
-
-trainTensors = torch.tensor(train_data, dtype=torch.float)
-labelTensors = torch.tensor(train_labels, dtype=torch.float)
-
-train_and_labels = TensorDataset(trainTensors, labelTensors)
-trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
-
 D_in, H, D_out = 40, hiddenLayers, 1
 
 model = torch.nn.Sequential(
@@ -295,29 +286,107 @@ model = torch.nn.Sequential(
           torch.nn.Sigmoid()
         ).to(device)
 
+torch.save(model.state_dict(), modelPath)
+
 weights = torch.tensor([weightNonbinding, weightBinding])
 loss_fn = torch.nn.BCELoss(reduction='mean')
-
-
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-for t in range(epochs):
-  for i, data in enumerate(trainloader):
-    train_batch, labels_batch = data
-    y_pred = model(train_batch)
-    loss = loss_fn(y_pred, labels_batch)
-    print(t, loss.item())
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
 
-testDataTensors = torch.tensor(test_data, dtype=torch.float)
-labelTensors = torch.tensor(test_labels, dtype=torch.float)
-test_pred = model(testDataTensors)
-tp, fp, tn, fn = calc_roc(test_pred, test_labels)
-print("TPR: "+str(tp/(tp+fn)))
-print("FPR: "+str(fp/(fp+tn)))
-print("Precision: "+str(tp/(tp+fp)))
-print("Recall: "+str(tp/(tp+fn)))
+if crossValidation:
+  splitSize = math.floor(len(train)/5)
+  split1_data = train[:splitSize]
+  split1_labels = labels[:splitSize]
+  split2_data = train[splitSize:splitSize*2]
+  split2_labels = labels[splitSize:splitSize*2]
+  split3_data = train[splitSize*2:splitSize*3]
+  split3_labels = labels[splitSize*2:splitSize*3]
+  split4_data = train[splitSize*3:splitSize*4]
+  split4_labels = labels[splitSize*3:splitSize*4]
+  split5_data = train[splitSize*4:]
+  split5_labels = labels[splitSize*4:]
+
+  allSplitsData = [split1_data, split2_data, split3_data, split4_data, split5_data]
+  allSplitsLabels = [split1_labels, split2_labels, split3_labels, split4_labels, split5_labels]
+
+  allTP = 0
+  allFP = 0
+  allTN = 0
+  allFN = 0
+  for x in range(5):
+    model = torch.load(modelPath)
+    # Cross-validation
+    currentTrainData = []
+    currentLabelsData = []
+    for y in range(5):
+      if x != y:
+        currentTrainData = currentTrainData.append(allSplitsData[y])
+        currentLabelsData = currentLabelsData.append(allSplitsLabels[y])
+    currentTestData = allSplitsData[x]
+    currentTestLabels = allSplitsLabels[x]
+    # initialize for training
+    trainTensors = torch.tensor(currentTrainData, dtype=torch.float)
+    labelTensors = torch.tensor(currentLabelsData, dtype=torch.float)
+    train_and_labels = TensorDataset(trainTensors, labelTensors)
+    trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
+    # train
+    for t in range(epochs):
+      for i, data in enumerate(trainloader):
+        train_batch, labels_batch = data
+        y_pred = model(train_batch)
+        loss_fn.weight = weights[labels_batch.long()]
+        loss = loss_fn(y_pred, labels_batch)
+        print(t, loss.item())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    # evaluate
+    testDataTensors = torch.tensor(currentTestData, dtype=torch.float)
+    test_pred = model(testDataTensors)
+    tp, fp, tn, fn = calc_roc(test_pred, currentTestLabels)
+    allTP = allTP + tp
+    allFP = allFP + fp
+    allTN = allTN + tn
+    allFN = allFN + fn
+  # output final stats:
+  print("TP: "+str(allTP))
+  print("FP: "+str(allFP))
+  print("TN: "+str(allTN))
+  print("FN: "+str(allFN))
+  print("TPR: "+str(allTP/(allTP+allFN)))
+  print("FPR: "+str(allFP/(allFP+allTN)))
+  print("Precision: "+str(allTP/(allTP+allFP)))
+  print("MCC: "+str(((allTP*allTN)-(allFP*allFN))/(math.sqrt((allTP+allFP)*(allTP+allFN)*(allTN+allFP)*(allTN+allFN)))))
+
+else:
+  train_data = train[:100000]
+  train_labels = labels[:100000]
+  test_data = train[100000:]
+  test_labels = labels[100000:]
+
+  trainTensors = torch.tensor(train_data, dtype=torch.float)
+  labelTensors = torch.tensor(train_labels, dtype=torch.float)
+  train_and_labels = TensorDataset(trainTensors, labelTensors)
+  trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
+
+  for t in range(epochs):
+    for i, data in enumerate(trainloader):
+      train_batch, labels_batch = data
+      y_pred = model(train_batch)
+      loss_fn.weight = weights[labels_batch.long()]
+      loss = loss_fn(y_pred, labels_batch)
+      print(t, loss.item())
+      optimizer.zero_grad()
+      loss.backward()
+      optimizer.step()
+
+  testDataTensors = torch.tensor(test_data, dtype=torch.float)
+  test_pred = model(testDataTensors)
+  tp, fp, tn, fn = calc_roc(test_pred, test_labels)
+  print("TPR: "+str(tp/(tp+fn)))
+  print("FPR: "+str(fp/(fp+tn)))
+  print("Precision: "+str(tp/(tp+fp)))
+  print("MCC: "+str(((tp*tn)-(fp*fn))/(math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn)))))
+
 
 #for t in range(500):
 #  y_pred = model(trainTensors)
