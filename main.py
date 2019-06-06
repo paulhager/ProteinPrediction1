@@ -17,9 +17,10 @@ hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 1e-5
-epochs = 2
+epochs = 200
 device = torch.device('cpu')
-crossValidation = True
+crossValidation = False
+predCutoff = 0.4
 #device = torch.device('cuda')
 modelPath = "initialModel"
 
@@ -238,16 +239,15 @@ def tot_lens(proteinSeqDict, bindingDict):
     plt.axis('equal')
     k.savefig('lengthPie.pdf')
 
-def calc_roc(test_pred, test_labels):
+def calc_roc(test_pred, test_labels, predCutoff = 0.4):
   tp = 0
   fp = 0
   tn = 0
   fn = 0
-  cutoff = 0.4
   for i, pred in enumerate(test_pred):
-    if pred.item() > cutoff and test_labels[i][0] == 1:
+    if pred.item() > predCutoff and test_labels[i][0] == 1:
       tp = tp + 1
-    elif pred.item() > cutoff:
+    elif pred.item() > predCutoff:
       fp = fp + 1
     elif test_labels[i][0] == 1:
       fn = fn + 1
@@ -315,14 +315,21 @@ if crossValidation:
   allTN = 0
   allFN = 0
   for x in range(5):
-    model = torch.load(modelPath)
+    model = torch.nn.Sequential(
+          torch.nn.Linear(D_in, H),
+          torch.nn.Sigmoid(),
+          torch.nn.Linear(H, D_out),
+          torch.nn.Sigmoid()
+        ).to(device)
+    model.load_state_dict(torch.load(modelPath))
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     # Cross-validation
     currentTrainData = []
     currentLabelsData = []
     for y in range(5):
       if x != y:
-        currentTrainData = currentTrainData.append(allSplitsData[y])
-        currentLabelsData = currentLabelsData.append(allSplitsLabels[y])
+        currentTrainData.extend(allSplitsData[y])
+        currentLabelsData.extend(allSplitsLabels[y])
     currentTestData = allSplitsData[x]
     currentTestLabels = allSplitsLabels[x]
     # initialize for training
@@ -344,7 +351,7 @@ if crossValidation:
     # evaluate
     testDataTensors = torch.tensor(currentTestData, dtype=torch.float)
     test_pred = model(testDataTensors)
-    tp, fp, tn, fn = calc_roc(test_pred, currentTestLabels)
+    tp, fp, tn, fn = calc_roc(test_pred, currentTestLabels, predCutoff)
     allTP = allTP + tp
     allFP = allFP + fp
     allTN = allTN + tn
@@ -383,7 +390,11 @@ else:
 
   testDataTensors = torch.tensor(test_data, dtype=torch.float)
   test_pred = model(testDataTensors)
-  tp, fp, tn, fn = calc_roc(test_pred, test_labels)
+  tp, fp, tn, fn = calc_roc(test_pred, test_labels, predCutoff)
+  print("TP: "+str(tp))
+  print("FP: "+str(fp))
+  print("TN: "+str(tn))
+  print("FN: "+str(fn))
   print("TPR: "+str(tp/(tp+fn)))
   print("FPR: "+str(fp/(fp+tn)))
   print("Precision: "+str(tp/(tp+fp)))
