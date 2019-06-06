@@ -7,15 +7,17 @@ import NeuralNetwork # pylint: disable=import-error
 import torch
 from torch.utils.data import Dataset, DataLoader, TensorDataset
 import pickle
-from Bio.SubsMat import MatrixInfo as matrices
 import math
+from Bio.SubsMat import MatrixInfo as matrices
+import time
 
+timer = time.time()
 batchSize = 1000
 hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 1e-5
-epochs = 200
+epochs = 2
 device = torch.device('cpu')
 crossValidation = True
 #device = torch.device('cuda')
@@ -387,7 +389,8 @@ else:
   print("Precision: "+str(tp/(tp+fp)))
   print("MCC: "+str(((tp*tn)-(fp*fn))/(math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn)))))
 
-
+runtime = time.time() - timer
+print("Runtime: ", runtime)
 #for t in range(500):
 #  y_pred = model(trainTensors)
 #  loss = loss_fn(y_pred, labelTensors)
