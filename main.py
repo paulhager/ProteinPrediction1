@@ -19,9 +19,10 @@ weightBinding = 0.6
 learning_rate = 1e-5
 epochs = 200
 device = torch.device('cpu')
-crossValidation = False
-predCutoff = 0.4
 #device = torch.device('cuda')
+crossValidation = True
+predCutoff = 0.4
+blosumScalar = 1
 modelPath = "initialModel"
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
@@ -40,6 +41,8 @@ pickleFileTrain = args.pickleTrain
 pickleFileLabel = args.pickleLabel
 
 blosum62 = matrices.blosum62
+for key in blosum62:
+    blosum62[key] *= blosumScalar
 blosumCutoffsDict = {
   -4 : 90, 
   -3 : 80, 
@@ -136,10 +139,10 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
             secondAA = mutAAid
           features2.append(score)
           features2.append(blosum62[(firstAA, secondAA)])
-          if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
-            features.append(1)
-          else:
-            features.append(-1)
+          # if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
+          #   features.append(1)
+          # else:
+          #   features.append(-1)
   return snapScoreDict, snapConfDict, featureDict, feature2Dict
 
 def loadBindingResidues(bindingResiduesFile):
@@ -239,7 +242,7 @@ def tot_lens(proteinSeqDict, bindingDict):
     plt.axis('equal')
     k.savefig('lengthPie.pdf')
 
-def calc_roc(test_pred, test_labels, predCutoff = 0.4):
+def calc_roc(test_pred, test_labels, predCutoff):
   tp = 0
   fp = 0
   tn = 0
@@ -279,18 +282,22 @@ else:
 print("Finished preparing data")
 NN = NeuralNetwork.Neural_Network()
 
-D_in, H, D_out = 40, hiddenLayers, 1
+D_in, H, H2, H3, D_out = 40, hiddenLayers, hiddenLayers, hiddenLayers, 1
 
 model = torch.nn.Sequential(
           torch.nn.Linear(D_in, H),
-          torch.nn.Sigmoid(),
-          torch.nn.Linear(H, D_out),
+          torch.nn.ReLU(),
+          torch.nn.Linear(H, H2),
+          torch.nn.ReLU(),
+          torch.nn.Linear(H2, H3),
+          torch.nn.ReLU(),
+          torch.nn.Linear(H3, D_out),
           torch.nn.Sigmoid()
         ).to(device)
 
 torch.save(model.state_dict(), modelPath)
 
-weights = torch.tensor([weightNonbinding, weightBinding])
+weights = torch.tensor([weightNonbinding, weightBinding], device=device)
 loss_fn = torch.nn.BCELoss(reduction='mean')
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -317,8 +324,12 @@ if crossValidation:
   for x in range(5):
     model = torch.nn.Sequential(
           torch.nn.Linear(D_in, H),
-          torch.nn.Sigmoid(),
-          torch.nn.Linear(H, D_out),
+          torch.nn.ReLU(),
+          torch.nn.Linear(H, H2),
+          torch.nn.ReLU(),
+          torch.nn.Linear(H2, H3),
+          torch.nn.ReLU(),
+          torch.nn.Linear(H3, D_out),
           torch.nn.Sigmoid()
         ).to(device)
     model.load_state_dict(torch.load(modelPath))
@@ -333,8 +344,8 @@ if crossValidation:
     currentTestData = allSplitsData[x]
     currentTestLabels = allSplitsLabels[x]
     # initialize for training
-    trainTensors = torch.tensor(currentTrainData, dtype=torch.float)
-    labelTensors = torch.tensor(currentLabelsData, dtype=torch.float)
+    trainTensors = torch.tensor(currentTrainData, dtype=torch.float, device=device)
+    labelTensors = torch.tensor(currentLabelsData, dtype=torch.float, device=device)
     train_and_labels = TensorDataset(trainTensors, labelTensors)
     trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
     # train
@@ -344,7 +355,7 @@ if crossValidation:
         y_pred = model(train_batch)
         loss_fn.weight = weights[labels_batch.long()]
         loss = loss_fn(y_pred, labels_batch)
-        print(t, loss.item())
+        print(x+1, t, loss.item())
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
