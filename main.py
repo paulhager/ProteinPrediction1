@@ -10,17 +10,19 @@ import pickle
 import math
 from Bio.SubsMat import MatrixInfo as matrices
 import time
+import copy
 
 timer = time.time()
 batchSize = 1000
-hiddenLayers = 200
+hiddenLayers = 20
 weightNonbinding = 0.4
 weightBinding = 0.6
-learning_rate = 1e-5
-epochs = 200
+learning_rate = 3e-3
+epochs = 100
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
+momentum=0.9
 #device = torch.device('cuda')
 modelPath = "initialModel"
 
@@ -39,7 +41,8 @@ bindingResiduesFile = args.bindingResidues
 pickleFileTrain = args.pickleTrain
 pickleFileLabel = args.pickleLabel
 
-blosum62 = matrices.blosum62
+blosum62 = copy.deepcopy(matrices.blosum62)
+blosum62scaled = copy.deepcopy(matrices.blosum62)
 blosumCutoffsDict = {
   -4 : 90, 
   -3 : 80, 
@@ -51,6 +54,21 @@ blosumCutoffsDict = {
   3 : 0
 }
 
+blosumScalingDict = {
+  -4 : -100, 
+  -3 : -75, 
+  -2 : -50, 
+  -1 : -25, 
+  0 : 0, 
+  1 : 33, 
+  2 : 66,
+  3 : 100
+}
+
+for key in blosum62scaled:
+  if blosum62scaled[key] in blosumScalingDict:
+    blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
+
 def loadFastaFiles(fastaFolder):
   proteinSeqDict = {}
   for filename in os.listdir(fastaFolder):
@@ -61,7 +79,7 @@ def loadFastaFiles(fastaFolder):
       proteinSeqDict[header[1:]] = sequence
   return proteinSeqDict
 
-def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
+def loadSnapCalcFeature(snapFolder, blosum62, blosum62scaled, blosumCutoffsDict):
   aaOrder = ['A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
   snapScoreDict = {}
   snapConfDict = {}
@@ -135,11 +153,11 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
             firstAA = posAAid
             secondAA = mutAAid
           features2.append(score)
-          features2.append(blosum62[(firstAA, secondAA)])
-          if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
-            features.append(1)
-          else:
-            features.append(-1)
+          features2.append(blosum62scaled[(firstAA, secondAA)])
+          #if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
+          #  features.append(1)
+          #else:
+          #  features.append(-1)
   return snapScoreDict, snapConfDict, featureDict, feature2Dict
 
 def loadBindingResidues(bindingResiduesFile):
@@ -173,7 +191,6 @@ def prepareData(featureDict, feature2Dict, bindingDict):
               train.append(proteinFeaturesByPos[aaPos])
               train2.append(proteinFeatures2ByPos[aaPos])
     return train, train2, train_labels
-
 
 def createFeatureHist(featureDict):
   featureSumFrequencies = []
@@ -264,7 +281,7 @@ if pickleFileTrain and pickleFileLabel:
 else:
   bindingDict = loadBindingResidues(bindingResiduesFile)
   proteinSeqDict = loadFastaFiles(fastaFolder)
-  snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
+  snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosum62scaled, blosumCutoffsDict)
   train, train2, labels = prepareData(featureDict, feature2Dict, bindingDict)
   with open('train.pickle', 'wb',) as handle:
     pickle.dump(train, handle, protocol=pickle.HIGHEST_PROTOCOL)
@@ -292,7 +309,7 @@ torch.save(model.state_dict(), modelPath)
 
 weights = torch.tensor([weightNonbinding, weightBinding])
 loss_fn = torch.nn.BCELoss(reduction='mean')
-optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 
 if crossValidation:
   splitSize = math.floor(len(train)/5)
@@ -390,15 +407,31 @@ else:
 
   testDataTensors = torch.tensor(test_data, dtype=torch.float)
   test_pred = model(testDataTensors)
-  tp, fp, tn, fn = calc_roc(test_pred, test_labels, predCutoff)
-  print("TP: "+str(tp))
-  print("FP: "+str(fp))
-  print("TN: "+str(tn))
-  print("FN: "+str(fn))
-  print("TPR: "+str(tp/(tp+fn)))
-  print("FPR: "+str(fp/(fp+tn)))
-  print("Precision: "+str(tp/(tp+fp)))
-  print("MCC: "+str(((tp*tn)-(fp*fn))/(math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn)))))
+  bestMCC = -1
+  bestCutoff = 0
+  for posCutoff in range(100):
+    posCutoff = posCutoff / 100
+    tp, fp, tn, fn = calc_roc(test_pred, test_labels, posCutoff)
+    denominator = math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+    if denominator != 0:
+      mcc = ((tp*tn)-(fp*fn))/denominator
+      if mcc > bestMCC:
+        bestMCC = mcc
+        bestCutoff = posCutoff
+        finalTP = tp
+        finalFP = fp
+        finalTN = tn
+        finalFN = fn
+
+  print("Best cutoff: "+str(bestCutoff))
+  print("TP: "+str(finalTP))
+  print("FP: "+str(finalFP))
+  print("TN: "+str(finalTN))
+  print("FN: "+str(finalFN))
+  print("TPR: "+str(finalTP/(finalTP+finalFN)))
+  print("FPR: "+str(finalFP/(finalFP+finalTN)))
+  print("Precision: "+str(finalTP/(finalTP+finalFP)))
+  print("MCC: "+str(bestMCC))
 
 runtime = time.time() - timer
 print("Runtime: ", runtime)
