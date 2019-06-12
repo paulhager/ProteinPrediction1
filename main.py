@@ -14,7 +14,7 @@ import copy
 
 timer = time.time()
 batchSize = 1000
-hiddenLayers = 20
+hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 3e-3
@@ -26,6 +26,7 @@ momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
 modelPath = "initialModel"
+trainedModelPath = 'trainedModel.pickle'
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
@@ -33,6 +34,7 @@ parser.add_argument('--snapFolder', help = "Path to folder containing snap files
 parser.add_argument('--bindingResidues', help = "Path to binding residues files", type = str)
 parser.add_argument('--pickleTrain', help = "Path to pickle file with train data structures", type=str)
 parser.add_argument('--pickleLabel', help = "Path to pickle file with label data structures", type=str)
+parser.add_argument('--trainedModel', help='Path to pre-trained model', type=str)
 
 args = parser.parse_args()
 
@@ -41,6 +43,11 @@ snapFolder = args.snapFolder
 bindingResiduesFile = args.bindingResidues
 pickleFileTrain = args.pickleTrain
 pickleFileLabel = args.pickleLabel
+trainedmodel = args.trainedModel
+if trainedmodel != None:
+    testmode = True
+else:
+    testmode = False
 
 blosum62 = copy.deepcopy(matrices.blosum62)
 blosum62scaled = copy.deepcopy(matrices.blosum62)
@@ -385,26 +392,33 @@ if crossValidation:
   print("MCC: "+str(((allTP*allTN)-(allFP*allFN))/(math.sqrt((allTP+allFP)*(allTP+allFN)*(allTN+allFP)*(allTN+allFN)))))
 
 else:
-  train_data = train[:100000]
-  train_labels = labels[:100000]
-  test_data = train[100000:]
-  test_labels = labels[100000:]
+  if testmode == False:
+    train_data = train[:100000]
+    train_labels = labels[:100000]
+    test_data = train[100000:]
+    test_labels = labels[100000:]
 
-  trainTensors = torch.tensor(train_data, dtype=torch.float)
-  labelTensors = torch.tensor(train_labels, dtype=torch.float)
-  train_and_labels = TensorDataset(trainTensors, labelTensors)
-  trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
+    trainTensors = torch.tensor(train_data, dtype=torch.float)
+    labelTensors = torch.tensor(train_labels, dtype=torch.float)
+    train_and_labels = TensorDataset(trainTensors, labelTensors)
+    trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
 
-  for t in range(epochs):
-    for i, data in enumerate(trainloader):
-      train_batch, labels_batch = data
-      y_pred = model(train_batch)
-      loss_fn.weight = weights[labels_batch.long()]
-      loss = loss_fn(y_pred, labels_batch)
-      print(t, loss.item())
-      optimizer.zero_grad()
-      loss.backward()
-      optimizer.step()
+    for t in range(epochs):
+      for i, data in enumerate(trainloader):
+        train_batch, labels_batch = data
+        y_pred = model(train_batch)
+        loss_fn.weight = weights[labels_batch.long()]
+        loss = loss_fn(y_pred, labels_batch)
+        print(t, loss.item())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    torch.save(model.state_dict(), trainedModelPath)
+
+  else:
+    test_data = train
+    test_labels = labels
+    model.load_state_dict(torch.load(trainedModelPath))
 
   testDataTensors = torch.tensor(test_data, dtype=torch.float)
   test_pred = model(testDataTensors)
