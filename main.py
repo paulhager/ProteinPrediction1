@@ -10,19 +10,21 @@ import pickle
 import math
 from Bio.SubsMat import MatrixInfo as matrices
 import time
+import simpleCNN
 
 timer = time.time()
 batchSize = 1000
 hiddenLayers = 200
-weightNonbinding = 0.4
-weightBinding = 0.6
-learning_rate = 1e-5
-epochs = 200
+weightNonbinding = 0.17
+weightBinding = 0.83
+
+learning_rate = 1e-4
+epochs = 40
 device = torch.device('cpu')
 #device = torch.device('cuda')
-crossValidation = True
+crossValidation = False
 predCutoff = 0.4
-blosumScalar = 1
+blosumScalar = 25
 modelPath = "initialModel"
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
@@ -41,18 +43,19 @@ pickleFileTrain = args.pickleTrain
 pickleFileLabel = args.pickleLabel
 
 blosum62 = matrices.blosum62
-for key in blosum62:
-    blosum62[key] *= blosumScalar
 blosumCutoffsDict = {
-  -4 : 90, 
-  -3 : 80, 
-  -2 : 70, 
-  -1 : 60, 
-  0 : 50, 
-  1 : 40, 
-  2 : 30,
-  3 : 0
+  -4 : -100,
+  -3 : -75,
+  -2 : -50,
+  -1 : -25,
+  0 : 0,
+  1 : 25,
+  2 : 50,
+  3 : 75
 }
+for key in blosum62:
+    if key in blosumCutoffsDict:
+        blosum62[key] = blosumCutoffsDict[key]
 
 def loadFastaFiles(fastaFolder):
   proteinSeqDict = {}
@@ -284,18 +287,20 @@ NN = NeuralNetwork.Neural_Network()
 
 D_in, H, H2, H3, D_out = 40, hiddenLayers, hiddenLayers, hiddenLayers, 1
 
-model = torch.nn.Sequential(
-          torch.nn.Linear(D_in, H),
-          torch.nn.ReLU(),
-          torch.nn.Linear(H, H2),
-          torch.nn.ReLU(),
-          torch.nn.Linear(H2, H3),
-          torch.nn.ReLU(),
-          torch.nn.Linear(H3, D_out),
-          torch.nn.Sigmoid()
-        ).to(device)
+# model = torch.nn.Sequential(
+#           torch.nn.Linear(D_in, H),
+#           torch.nn.ReLU(),
+#           torch.nn.Linear(H, H2),
+#           torch.nn.ReLU(),
+#           torch.nn.Linear(H2, H3),
+#           torch.nn.ReLU(),
+#           torch.nn.Linear(H3, D_out),
+#           torch.nn.Sigmoid()
+#         ).to(device)
 
-torch.save(model.state_dict(), modelPath)
+model = simpleCNN.simpleCNN()
+
+# torch.save(model.state_dict(), modelPath)
 
 weights = torch.tensor([weightNonbinding, weightBinding], device=device)
 loss_fn = torch.nn.BCELoss(reduction='mean')
@@ -388,18 +393,25 @@ else:
   train_and_labels = TensorDataset(trainTensors, labelTensors)
   trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
 
-  for t in range(epochs):
-    for i, data in enumerate(trainloader):
-      train_batch, labels_batch = data
-      y_pred = model(train_batch)
-      loss_fn.weight = weights[labels_batch.long()]
-      loss = loss_fn(y_pred, labels_batch)
-      print(t, loss.item())
-      optimizer.zero_grad()
-      loss.backward()
-      optimizer.step()
+  loader = False
 
+  if loader == False:
+    for t in range(epochs):
+      for i, data in enumerate(trainloader):
+        train_batch, labels_batch = data
+        train_batch = train_batch.view(batchSize, 40, 1)
+        y_pred = model(train_batch)
+        loss_fn.weight = weights[labels_batch.long()]
+        loss = loss_fn(y_pred, labels_batch)
+        print(t, loss.item())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    torch.save(model.state_dict(), modelPath)
+  else:
+    model.load_state_dict(torch.load(modelPath))
   testDataTensors = torch.tensor(test_data, dtype=torch.float)
+  testDataTensors = testDataTensors.view(len(test_data), 40, 1)
   test_pred = model(testDataTensors)
   tp, fp, tn, fn = calc_roc(test_pred, test_labels, predCutoff)
   print("TP: "+str(tp))
@@ -408,7 +420,11 @@ else:
   print("FN: "+str(fn))
   print("TPR: "+str(tp/(tp+fn)))
   print("FPR: "+str(fp/(fp+tn)))
+  prec = tp/(tp+fp)
+  rec = tp/(tp+fn)
   print("Precision: "+str(tp/(tp+fp)))
+  print("Recall: "+str(tp/(tp+fn)))
+  print("F1-Score: "+str(2*((prec*rec)/(prec+rec))))
   print("MCC: "+str(((tp*tn)-(fp*fn))/(math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn)))))
 
 runtime = time.time() - timer
