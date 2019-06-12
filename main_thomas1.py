@@ -18,7 +18,7 @@ hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 3e-3
-epochs = 200
+epochs = 20
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
@@ -301,7 +301,9 @@ NN = NeuralNetwork.Neural_Network()
 D_in, H, D_out = 40, hiddenLayers, 1
 
 model = torch.nn.Sequential(
-          torch.nn.Conv1d(D_in, 32, kernel_size = 5, stride = 1, padding = 2),
+          torch.nn.Conv1d(D_in, 32, kernel_size = 7, stride = 1, padding = 3),
+          torch.nn.Sigmoid(),
+          torch.nn.Conv1d(32, 1, kernel_size = 5, stride = 1, padding = 2),
           torch.nn.Sigmoid(),
           torch.nn.Linear(1, D_out),
           torch.nn.Sigmoid()
