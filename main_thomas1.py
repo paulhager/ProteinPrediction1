@@ -1,13 +1,32 @@
 import argparse
-import matplotlib.pyplot as plt # pylint: disable=import-error
+#import matplotlib.pyplot as plt # pylint: disable=import-error
 import os
-#import NeuralNetwork # pylint: disable=import-error
+import ntpath
+import re
+import NeuralNetwork # pylint: disable=import-error
 import torch
+from torch.utils.data import Dataset, DataLoader, TensorDataset
 import pickle
-from torch.utils import data
-from CustomDataset import Dataset
+import math
 from Bio.SubsMat import MatrixInfo as matrices
-from the_NN import TwoLayerNet
+import time
+import copy
+
+timer = time.time()
+batchSize = 1000
+hiddenLayers = 200
+weightNonbinding = 0.4
+weightBinding = 0.6
+learning_rate = 3e-3
+epochs = 200
+device = torch.device('cpu')
+crossValidation = False
+predCutoff = 0.4
+momentum=0.9
+#device = torch.device('cuda')
+blosumScalar = 1
+modelPath = "initialModel"
+
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
 parser.add_argument('--snapFolder', help = "Path to folder containing snap files", type = str)
@@ -20,10 +39,12 @@ args = parser.parse_args()
 fastaFolder = args.fastaFolder
 snapFolder = args.snapFolder
 bindingResiduesFile = args.bindingResidues
-pickleFileTrain = args.pickleTrain
-pickleFileLabel = args.pickleLabel
+pickleFileTrain = 'C:\\Users\\Thomas\\Documents\\Uni_masters\\ProteinPrediction1\\train2.pickle'
+pickleFileLabel = 'C:\\Users\\Thomas\\Documents\\Uni_masters\\ProteinPrediction1\\labels.pickle'
 
-blosum62 = matrices.blosum62
+
+blosum62 = copy.deepcopy(matrices.blosum62)
+blosum62scaled = copy.deepcopy(matrices.blosum62)
 blosumCutoffsDict = {
   -4 : 90, 
   -3 : 80, 
@@ -35,6 +56,21 @@ blosumCutoffsDict = {
   3 : 0
 }
 
+blosumScalingDict = {
+  -4 : -100, 
+  -3 : -75, 
+  -2 : -50, 
+  -1 : -25, 
+  0 : 0, 
+  1 : 33, 
+  2 : 66,
+  3 : 100
+}
+
+for key in blosum62scaled:
+  if blosum62scaled[key] in blosumScalingDict:
+    blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
+
 def loadFastaFiles(fastaFolder):
   proteinSeqDict = {}
   for filename in os.listdir(fastaFolder):
@@ -45,7 +81,7 @@ def loadFastaFiles(fastaFolder):
       proteinSeqDict[header[1:]] = sequence
   return proteinSeqDict
 
-def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
+def loadSnapCalcFeature(snapFolder, blosum62, blosum62scaled, blosumCutoffsDict):
   aaOrder = ['A', 'R', 'N', 'D', 'C', 'Q', 'E', 'G', 'H', 'I', 'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
   snapScoreDict = {}
   snapConfDict = {}
@@ -119,11 +155,11 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict):
             firstAA = posAAid
             secondAA = mutAAid
           features2.append(score)
-          features2.append(blosum62[(firstAA, secondAA)])
-          if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
-            features.append(1)
-          else:
-            features.append(-1)
+          features2.append(blosum62scaled[(firstAA, secondAA)])
+          #if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
+          #  features.append(1)
+          #else:
+          #  features.append(-1)
   return snapScoreDict, snapConfDict, featureDict, feature2Dict
 
 def loadBindingResidues(bindingResiduesFile):
@@ -157,7 +193,6 @@ def prepareData(featureDict, feature2Dict, bindingDict):
               train.append(proteinFeaturesByPos[aaPos])
               train2.append(proteinFeatures2ByPos[aaPos])
     return train, train2, train_labels
-
 
 def createFeatureHist(featureDict):
   featureSumFrequencies = []
@@ -223,42 +258,202 @@ def tot_lens(proteinSeqDict, bindingDict):
     plt.axis('equal')
     k.savefig('lengthPie.pdf')
 
+def calc_roc(test_pred, test_labels, predCutoff = 0.4):
+  tp = 0
+  fp = 0
+  tn = 0
+  fn = 0
+  for i, pred in enumerate(test_pred):
+    if pred.item() > predCutoff and test_labels[i][0] == 1:
+      tp = tp + 1
+    elif pred.item() > predCutoff:
+      fp = fp + 1
+    elif test_labels[i][0] == 1:
+      fn = fn + 1
+    else:
+      tn = tn + 1
+  return tp, fp, tn, fn
+
+
 if pickleFileTrain and pickleFileLabel:
   with open (pickleFileTrain, 'rb') as pft:
     train = pickle.load(pft)
   with open (pickleFileLabel, 'rb') as pfl:
-    train_labels = pickle.load(pfl)
+    labels = pickle.load(pfl)
 else:
   bindingDict = loadBindingResidues(bindingResiduesFile)
   proteinSeqDict = loadFastaFiles(fastaFolder)
-  snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosumCutoffsDict)
-  train, train2, train_labels = prepareData(featureDict, feature2Dict, bindingDict)
+  snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosum62scaled, blosumCutoffsDict)
+  train, train2, labels = prepareData(featureDict, feature2Dict, bindingDict)
   with open('train.pickle', 'wb',) as handle:
     pickle.dump(train, handle, protocol=pickle.HIGHEST_PROTOCOL)
   with open('train2.pickle', 'wb',) as handle:
     pickle.dump(train2, handle, protocol=pickle.HIGHEST_PROTOCOL)
   with open('labels.pickle', 'wb',) as handle:
-    pickle.dump(train_labels, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    pickle.dump(labels, handle, protocol=pickle.HIGHEST_PROTOCOL)
+  # train = with cutoff
+  # train2 = raw data (blosum & SNAP2)
   train = train2
 
-def predict(model, bindVals, nonBindVals):
-    bindTest = torch.tensor((bindVals), dtype=torch.float)
-    nonBindTest = torch.tensor((nonBindVals), dtype=torch.float)
-    print ("Predicted data binding site: ")
-    print ("Input (scaled): \n" + str(bindTest))
-    print ("Output: \n" + str(model.forward(bindTest)))
-    print ("-------")
-    print ("Predicted data non-binding site: ")
-    print ("Input (scaled): \n" + str(nonBindTest))
-    print ("Output: \n" + str(model.forward(nonBindTest)))
-        
 print("Finished preparing data")
-#NN = NeuralNetwork.Neural_Network(20,1,1000)
-trainTensors = torch.tensor(train[:100000]).float()
-labelTensors = torch.tensor(train_labels[:100000]).float()
+NN = NeuralNetwork.Neural_Network()
 
-val_Tensors = torch.tensor(train).float()
-val_label_Tensors = torch.tensor(train_labels[100000:]).float()
+D_in, H, D_out = 40, hiddenLayers, 1
+
+model = torch.nn.Sequential(
+          torch.nn.Conv1d(D_in, 32, kernel_size = 5, stride = 1, padding = 2),
+          torch.nn.Sigmoid(),
+          torch.nn.Linear(1, D_out),
+          torch.nn.Sigmoid()
+        ).to(device)
+
+torch.save(model.state_dict(), modelPath)
+
+weights = torch.tensor([weightNonbinding, weightBinding], device=device)
+loss_fn = torch.nn.BCELoss(reduction = 'mean')
+optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+
+if crossValidation:
+  splitSize = math.floor(len(train)/5)
+  split1_data = train[:splitSize]
+  split1_labels = labels[:splitSize]
+  split2_data = train[splitSize:splitSize*2]
+  split2_labels = labels[splitSize:splitSize*2]
+  split3_data = train[splitSize*2:splitSize*3]
+  split3_labels = labels[splitSize*2:splitSize*3]
+  split4_data = train[splitSize*3:splitSize*4]
+  split4_labels = labels[splitSize*3:splitSize*4]
+  split5_data = train[splitSize*4:]
+  split5_labels = labels[splitSize*4:]
+
+  allSplitsData = [split1_data, split2_data, split3_data, split4_data, split5_data]
+  allSplitsLabels = [split1_labels, split2_labels, split3_labels, split4_labels, split5_labels]
+
+  allTP = 0
+  allFP = 0
+  allTN = 0
+  allFN = 0
+  for x in range(5):
+    model = torch.nn.Sequential(
+          torch.nn.Linear(D_in, H),
+          torch.nn.Sigmoid(),
+          torch.nn.Linear(H, D_out),
+          torch.nn.Sigmoid()
+        ).to(device)
+    model.load_state_dict(torch.load(modelPath))
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # Cross-validation
+    currentTrainData = []
+    currentLabelsData = []
+    for y in range(5):
+      if x != y:
+        currentTrainData.extend(allSplitsData[y])
+        currentLabelsData.extend(allSplitsLabels[y])
+    currentTestData = allSplitsData[x]
+    currentTestLabels = allSplitsLabels[x]
+    # initialize for training
+    trainTensors = torch.tensor(currentTrainData, dtype=torch.float, device=device)
+    labelTensors = torch.tensor(currentLabelsData, dtype=torch.float, device=device)
+    train_and_labels = TensorDataset(trainTensors, labelTensors)
+    trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
+    # train
+    for t in range(epochs):
+      for i, data in enumerate(trainloader):
+        train_batch, labels_batch = data
+        y_pred = model(train_batch)
+        loss_fn.weight = weights[labels_batch.long()]
+        loss = loss_fn(y_pred, labels_batch)
+        print(x+1, t, loss.item())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+    # evaluate
+    testDataTensors = torch.tensor(currentTestData, dtype=torch.float)
+    test_pred = model(testDataTensors)
+    tp, fp, tn, fn = calc_roc(test_pred, currentTestLabels, predCutoff)
+    allTP = allTP + tp
+    allFP = allFP + fp
+    allTN = allTN + tn
+    allFN = allFN + fn
+  # output final stats:
+  print("TP: "+str(allTP))
+  print("FP: "+str(allFP))
+  print("TN: "+str(allTN))
+  print("FN: "+str(allFN))
+  print("TPR: "+str(allTP/(allTP+allFN)))
+  print("FPR: "+str(allFP/(allFP+allTN)))
+  print("Precision: "+str(allTP/(allTP+allFP)))
+  print("MCC: "+str(((allTP*allTN)-(allFP*allFN))/(math.sqrt((allTP+allFP)*(allTP+allFN)*(allTN+allFP)*(allTN+allFN)))))
+
+else:
+  train_data = train[:100000]
+  train_labels = labels[:100000]
+  test_data = train[100000:]
+  test_labels = labels[100000:]
+
+  trainTensors = torch.tensor(train_data, dtype=torch.float)
+  labelTensors = torch.tensor(train_labels, dtype=torch.float)
+  train_and_labels = TensorDataset(trainTensors, labelTensors)
+  trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
+
+  for t in range(epochs):
+    for i, data in enumerate(trainloader):
+      train_batch, labels_batch = data
+      y_pred = model(train_batch.unsqueeze(2))
+      loss_fn.weight = weights[labels_batch.long()]
+      loss = loss_fn(y_pred, labels_batch)
+      print(t, loss.item())
+      optimizer.zero_grad()
+      loss.backward()
+      optimizer.step()
+
+  testDataTensors = torch.tensor(test_data, dtype=torch.float)
+  test_pred = model(testDataTensors.unsqueeze(2))
+  bestMCC = -1
+  bestCutoff = 0
+  for posCutoff in range(100):
+    posCutoff = posCutoff / 100
+    tp, fp, tn, fn = calc_roc(test_pred, test_labels, posCutoff)
+    denominator = math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+    if denominator != 0:
+      mcc = ((tp*tn)-(fp*fn))/denominator
+      if mcc > bestMCC:
+        bestMCC = mcc
+        bestCutoff = posCutoff
+        finalTP = tp
+        finalFP = fp
+        finalTN = tn
+        finalFN = fn
+
+  print("Best cutoff: "+str(bestCutoff))
+  print("TP: "+str(finalTP))
+  print("FP: "+str(finalFP))
+  print("TN: "+str(finalTN))
+  print("FN: "+str(finalFN))
+  print("TPR: "+str(finalTP/(finalTP+finalFN)))
+  print("FPR: "+str(finalFP/(finalFP+finalTN)))
+  print("Precision: "+str(finalTP/(finalTP+finalFP)))
+  print("MCC: "+str(bestMCC))
+
+runtime = time.time() - timer
+print("Runtime: ", runtime)
+#for t in range(500):
+#  y_pred = model(trainTensors)
+#  loss = loss_fn(y_pred, labelTensors)
+#  print(t, loss.item())
+#  optimizer.zero_grad()
+#  loss.backward()
+#  optimizer.step()
+
+#bindTest = torch.tensor((train[54]), dtype=torch.float)
+#nonBindTest = torch.tensor((train[55]), dtype=torch.float)
+#print ("Predicted data binding site: ")
+#print ("Input (scaled): \n" + str(bindTest))
+#print ("Output: \n" + str(model(bindTest)))
+#print ("-------")
+#print ("Predicted data non-binding site: ")
+#print ("Input (scaled): \n" + str(nonBindTest))
+#print ("Output: \n" + str(model(nonBindTest)))
 
 #for x in range(len(train)):  # trains the NN 1,000 times
 #  i = torch.tensor([train[x]], dtype=torch.float)
@@ -266,49 +461,10 @@ val_label_Tensors = torch.tensor(train_labels[100000:]).float()
 #  print ("#" + str(x) + " Loss: " + str(torch.mean((o - NN(i))**2).detach().item()))  # mean sum squared loss
 #  NN.train(i, o)
 
-# =============================================================================
-# for i in range(5):  # trains the NN 1,000 times
-#   print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
-#   NN.train(trainTensors, labelTensors)
-# 
-# NN.saveWeights(NN)
-# NN.predict(train[54], train[55])
-# =============================================================================
 
-NN = TwoLayerNet(20,100,1)
-use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
-batch_size = 100
-params = {'batch_size': batch_size,
-      'shuffle': True,
-      'num_workers': 0}
-dataset = Dataset(train[:100000],train_labels[:100000])
-val_dataset = Dataset(train[100000:],train_labels[100000:])
+#for i in range(400):  # trains the NN 1,000 times
+#  print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
+#  NN.train(trainTensors, labelTensors)
 
-training_generator = data.DataLoader(dataset, **params)
-validation_generator = data.DataLoader(dataset, **params)
-
-optimizer = torch.optim.Adam(NN.parameters(), lr=0.000001)
-criterion = torch.nn.MSELoss(reduction='sum')
-for epoch in range(20):
-    for local_batch, local_labels in training_generator:
-        local_batch, local_labels = local_batch.to(device), local_labels.to(device)
-        #print ("#" + str(epoch) + " Loss: " + str(torch.mean((local_labels - NN(local_batch))**2).detach().item()))  # mean sum quared loss
-        x_pred = NN(local_batch)
-        loss = criterion(x_pred,local_labels)
-        print(epoch," & ",loss.item())
-        # Zero gradients, perform a backward pass, and update the weights.
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-n = 0
-accr_batch = 0
-threshold = 0.2
-for local_batch, local_labels in validation_generator:  
-    n += 1
-    i = int(((NN(local_batch) > threshold) == local_labels.byte()).sum())
-    accr_batch += int(i)/batch_size    
-accr = accr_batch/n
-print('Net accuracy is:',accr)
 #NN.saveWeights(NN)
-predict(NN, train[54], train[55]) 
+#NN.predict(bindVals=train[54], nonBindVals=train[55])
