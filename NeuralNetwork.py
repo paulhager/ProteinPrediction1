@@ -29,11 +29,22 @@ class Neural_Network(nn.Module):
     return s * (1 - s)
   
   def backward(self, X, y, o):
-    self.o_error = y - o # error in output
+    w = []
+    for i in y:
+      if i == 0:
+        w.append([10.0])
+      else:
+        w.append([1.0])
+    w = torch.tensor(w)
+    weight = torch.tensor([0.7, 0.3])
+    self.o_error = torch.nn.functional.binary_cross_entropy(input=o, target=y, weight=weight[y.long()])
+    self.o_error = self.sigmoid(self.o_error)
+    print(self.o_error)
+    # self.o_error = y - o # error in output
     self.o_delta = self.o_error * self.sigmoidPrime(o) # derivative of sig to error
-    self.z2_error = torch.matmul(self.o_delta, torch.t(self.W2))
-    self.z2_delta = self.z2_error * self.sigmoidPrime(self.z2)
-    self.W1 += torch.matmul(torch.t(X), self.z2_delta) * 0.0001
+    # self.z2_error = torch.matmul(self.o_delta, torch.t(self.W2))
+    # self.z2_delta = self.z2_error * self.sigmoidPrime(self.z2)
+    self.W1 += torch.matmul(torch.t(X), self.o_delta) * 0.0001
     self.W2 += torch.matmul(torch.t(self.z2), self.o_delta) * 0.0001
     
   def train(self, X, y):

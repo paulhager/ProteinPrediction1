@@ -24,6 +24,7 @@ crossValidation = False
 predCutoff = 0.4
 momentum=0.9
 #device = torch.device('cuda')
+blosumScalar = 1
 modelPath = "initialModel"
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
@@ -307,7 +308,7 @@ model = torch.nn.Sequential(
 
 torch.save(model.state_dict(), modelPath)
 
-weights = torch.tensor([weightNonbinding, weightBinding])
+weights = torch.tensor([weightNonbinding, weightBinding], device=device)
 loss_fn = torch.nn.BCELoss(reduction='mean')
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 
@@ -350,8 +351,8 @@ if crossValidation:
     currentTestData = allSplitsData[x]
     currentTestLabels = allSplitsLabels[x]
     # initialize for training
-    trainTensors = torch.tensor(currentTrainData, dtype=torch.float)
-    labelTensors = torch.tensor(currentLabelsData, dtype=torch.float)
+    trainTensors = torch.tensor(currentTrainData, dtype=torch.float, device=device)
+    labelTensors = torch.tensor(currentLabelsData, dtype=torch.float, device=device)
     train_and_labels = TensorDataset(trainTensors, labelTensors)
     trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
     # train
@@ -361,7 +362,7 @@ if crossValidation:
         y_pred = model(train_batch)
         loss_fn.weight = weights[labels_batch.long()]
         loss = loss_fn(y_pred, labels_batch)
-        print(t, loss.item())
+        print(x+1, t, loss.item())
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
