@@ -26,6 +26,7 @@ momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
 modelPath = "initialModel"
+trainedModelPath = 'trainedModel.pickle'
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
@@ -412,9 +413,12 @@ else:
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+    torch.save(model.state_dict(), trainedModelPath)
+
   else:
     test_data = train
     test_labels = labels
+    model.load_state_dict(torch.load(trainedModelPath))
 
   testDataTensors = torch.tensor(test_data, dtype=torch.float)
   test_pred = model(testDataTensors)
