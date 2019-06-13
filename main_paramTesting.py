@@ -14,18 +14,20 @@ import copy
 
 timer = time.time()
 batchSize = 1000
-hiddenLayers = 200
+hiddenNodes = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
-learning_rate = 3e-3
-epochs = 20
+learning_rate = 3e-4
+epochs = 200
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
-momentum=0.9
+momentum=0.90
 #device = torch.device('cuda')
 blosumScalar = 1
 modelPath = "initialModel"
+
+optimize = True
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
 parser.add_argument('--fastaFolder', help = "Path to folder containing fasta files", type = str)
@@ -39,9 +41,8 @@ args = parser.parse_args()
 fastaFolder = args.fastaFolder
 snapFolder = args.snapFolder
 bindingResiduesFile = args.bindingResidues
-pickleFileTrain = 'C:\\Users\\Thomas\\Documents\\Uni_masters\\ProteinPrediction1\\train2.pickle'
-pickleFileLabel = 'C:\\Users\\Thomas\\Documents\\Uni_masters\\ProteinPrediction1\\labels.pickle'
-
+pickleFileTrain = args.pickleTrain
+pickleFileLabel = args.pickleLabel
 
 blosum62 = copy.deepcopy(matrices.blosum62)
 blosum62scaled = copy.deepcopy(matrices.blosum62)
@@ -274,6 +275,55 @@ def calc_roc(test_pred, test_labels, predCutoff = 0.4):
       tn = tn + 1
   return tp, fp, tn, fn
 
+def trainParamOptimizer(batchSize, hiddenNodes, weightNonbinding, weightBinding, learning_rate, epochs, momentum, train_data, train_labels, test_data, test_labels):
+  D_in, H, D_out = 40, hiddenNodes, 1
+  trainTensors = torch.tensor(train_data, dtype=torch.float)
+  labelTensors = torch.tensor(train_labels, dtype=torch.float)
+  train_and_labels = TensorDataset(trainTensors, labelTensors)
+  trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
+
+  model = torch.nn.Sequential(
+          torch.nn.Linear(D_in, H),
+          torch.nn.Sigmoid(),
+          torch.nn.Linear(H, D_out),
+          torch.nn.Sigmoid()
+        ).to(device)
+
+  weights = torch.tensor([weightNonbinding, weightBinding])
+  loss_fn = torch.nn.BCELoss(reduction='mean')
+
+  optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
+
+  for t in range(epochs):
+    for i, data in enumerate(trainloader):
+      train_batch, labels_batch = data
+      y_pred = model(train_batch)
+      loss_fn.weight = weights[labels_batch.long()]
+      loss = loss_fn(y_pred, labels_batch)
+      print(t, loss.item())
+      optimizer.zero_grad()
+      loss.backward()
+      optimizer.step()
+
+  testDataTensors = torch.tensor(test_data, dtype=torch.float)
+  test_pred = model(testDataTensors)
+  bestMCC = -1
+  bestCutoff = 0
+  for posCutoff in range(10, 80, 1):
+    posCutoff = posCutoff / 100
+    tp, fp, tn, fn = calc_roc(test_pred, test_labels, posCutoff)
+    denominator = math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
+    if denominator != 0:
+      mcc = ((tp*tn)-(fp*fn))/denominator
+      if mcc > bestMCC:
+        bestMCC = mcc
+        bestCutoff = posCutoff
+        finalTP = tp
+        finalFP = fp
+        finalTN = tn
+        finalFN = fn
+  return bestCutoff, finalTP, finalFP, finalTN, finalFN, bestMCC
+
 
 if pickleFileTrain and pickleFileLabel:
   with open (pickleFileTrain, 'rb') as pft:
@@ -298,21 +348,19 @@ else:
 print("Finished preparing data")
 NN = NeuralNetwork.Neural_Network()
 
-D_in, H, D_out = 40, hiddenLayers, 1
+D_in, H, D_out = 40, hiddenNodes, 1
 
 model = torch.nn.Sequential(
-          torch.nn.Conv1d(D_in, 32, kernel_size = 7, stride = 1, padding = 3),
+          torch.nn.Linear(D_in, H),
           torch.nn.Sigmoid(),
-          torch.nn.Conv1d(32, 1, kernel_size = 5, stride = 1, padding = 2),
-          torch.nn.Sigmoid(),
-          torch.nn.Linear(1, D_out),
+          torch.nn.Linear(H, D_out),
           torch.nn.Sigmoid()
         ).to(device)
-
 torch.save(model.state_dict(), modelPath)
 
 weights = torch.tensor([weightNonbinding, weightBinding], device=device)
-loss_fn = torch.nn.BCELoss(reduction = 'mean')
+loss_fn = torch.nn.BCELoss(reduction='mean')
+
 optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
 
 if crossValidation:
@@ -343,7 +391,7 @@ if crossValidation:
           torch.nn.Sigmoid()
         ).to(device)
     model.load_state_dict(torch.load(modelPath))
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momentum)
     # Cross-validation
     currentTrainData = []
     currentLabelsData = []
@@ -393,80 +441,58 @@ else:
   test_data = train[100000:]
   test_labels = labels[100000:]
 
-  trainTensors = torch.tensor(train_data, dtype=torch.float)
-  labelTensors = torch.tensor(train_labels, dtype=torch.float)
-  train_and_labels = TensorDataset(trainTensors, labelTensors)
-  trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
+learningRates = [5e-3, 1e-3, 5e-4, 1e-4, 5e-5, 1e-5, 5e-6, 1e-6]
+#learningRates = [5e-4]
 
-  for t in range(epochs):
-    for i, data in enumerate(trainloader):
-      train_batch, labels_batch = data
-      y_pred = model(train_batch.unsqueeze(2))
-      loss_fn.weight = weights[labels_batch.long()]
-      loss = loss_fn(y_pred, labels_batch)
-      print(t, loss.item())
-      optimizer.zero_grad()
-      loss.backward()
-      optimizer.step()
-
-  testDataTensors = torch.tensor(test_data, dtype=torch.float)
-  test_pred = model(testDataTensors.unsqueeze(2))
-  bestMCC = -1
-  bestCutoff = 0
-  for posCutoff in range(100):
-    posCutoff = posCutoff / 100
-    tp, fp, tn, fn = calc_roc(test_pred, test_labels, posCutoff)
-    denominator = math.sqrt((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))
-    if denominator != 0:
-      mcc = ((tp*tn)-(fp*fn))/denominator
-      if mcc > bestMCC:
-        bestMCC = mcc
-        bestCutoff = posCutoff
-        finalTP = tp
-        finalFP = fp
-        finalTN = tn
-        finalFN = fn
-
-  print("Best cutoff: "+str(bestCutoff))
-  print("TP: "+str(finalTP))
-  print("FP: "+str(finalFP))
-  print("TN: "+str(finalTN))
-  print("FN: "+str(finalFN))
-  print("TPR: "+str(finalTP/(finalTP+finalFN)))
-  print("FPR: "+str(finalFP/(finalFP+finalTN)))
-  print("Precision: "+str(finalTP/(finalTP+finalFP)))
-  print("MCC: "+str(bestMCC))
+if optimize:
+  bestMCC = 0
+  for batchSize in range(500, 1001, 500):
+    for hiddenNodes in range(20, 501, 80):
+      for weightNonbinding in range(1, 10, 1):
+        weightNonbinding = weightNonbinding/10
+        for weightBinding in range(1, 10, 1):
+          weightBinding = weightBinding/10
+          for learning_rate in learningRates:
+            for epochs in range(20, 421, 60):
+              for momentum in range(1, 10, 1):
+                momentum = momentum/10
+                cutoff, tp, fp, tn, fn, mcc = trainParamOptimizer(batchSize, hiddenNodes, weightNonbinding, weightBinding, learning_rate, epochs, momentum, train_data, train_labels, test_data, test_labels)
+                print("Best cutoff: "+str(cutoff))
+                print("TP: "+str(tp))
+                print("FP: "+str(fp))
+                print("TN: "+str(tn))
+                print("FN: "+str(fn))
+                print("MCC: "+str(mcc))
+                if mcc > bestMCC:
+                  bestMCC = mcc
+                  bestTP = tp
+                  bestFP = fp
+                  bestTN = tn
+                  bestFN = fn
+                  bestCutoff = cutoff
+                  f = open('BestParams.txt', 'w')
+                  f.write("batchSize: "+str(batchSize))
+                  f.write("\nhiddenNodes: "+str(hiddenNodes))
+                  f.write("\nweightNonbinding: "+str(weightNonbinding))
+                  f.write("\nweightBinding: "+str(weightBinding))
+                  f.write("\nlearning_rate: "+str(learning_rate))
+                  f.write("\nepochs: "+str(epochs))
+                  f.write("\nmomentum: "+str(momentum))
+                  f.write("\nbestMCC: "+str(bestMCC))
+                  f.write("\nbestCutoff: "+str(cutoff))
+                  f.write("\nbestTP: "+str(bestTP))
+                  f.write("\nbestFP: "+str(bestFP))
+                  f.write("\nbestTN: "+str(bestTN))
+                  f.write("\nbestFN: "+str(bestFN))
+                  f.close()
+else:
+    cutoff, tp, fp, tn, fn, mcc = trainParamOptimizer(batchSize, hiddenNodes, weightNonbinding, weightBinding, learning_rate, epochs, momentum, train_data, train_labels, test_data, test_labels)
+    print("Best cutoff: "+str(cutoff))
+    print("TP: "+str(tp))
+    print("FP: "+str(fp))
+    print("TN: "+str(tn))
+    print("FN: "+str(fn))
+    print("MCC: "+str(mcc))
 
 runtime = time.time() - timer
 print("Runtime: ", runtime)
-#for t in range(500):
-#  y_pred = model(trainTensors)
-#  loss = loss_fn(y_pred, labelTensors)
-#  print(t, loss.item())
-#  optimizer.zero_grad()
-#  loss.backward()
-#  optimizer.step()
-
-#bindTest = torch.tensor((train[54]), dtype=torch.float)
-#nonBindTest = torch.tensor((train[55]), dtype=torch.float)
-#print ("Predicted data binding site: ")
-#print ("Input (scaled): \n" + str(bindTest))
-#print ("Output: \n" + str(model(bindTest)))
-#print ("-------")
-#print ("Predicted data non-binding site: ")
-#print ("Input (scaled): \n" + str(nonBindTest))
-#print ("Output: \n" + str(model(nonBindTest)))
-
-#for x in range(len(train)):  # trains the NN 1,000 times
-#  i = torch.tensor([train[x]], dtype=torch.float)
-#  o = torch.tensor(train_labels[x], dtype=torch.float)
-#  print ("#" + str(x) + " Loss: " + str(torch.mean((o - NN(i))**2).detach().item()))  # mean sum squared loss
-#  NN.train(i, o)
-
-
-#for i in range(400):  # trains the NN 1,000 times
-#  print ("#" + str(i) + " Loss: " + str(torch.mean((labelTensors - NN(trainTensors))**2).detach().item()))  # mean sum quared loss
-#  NN.train(trainTensors, labelTensors)
-
-#NN.saveWeights(NN)
-#NN.predict(bindVals=train[54], nonBindVals=train[55])
