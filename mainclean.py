@@ -21,7 +21,7 @@ predCutoff = 0.4
 momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
-modelPath = "initialModel"
+
 trainedModelPath = 'trainedModel.pickle'
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
@@ -72,6 +72,7 @@ blosumScalingDict = {
 for key in blosum62scaled:
   if blosum62scaled[key] in blosumScalingDict:
     blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
+
 
 def loadFastaFiles(fastaFolder):
   proteinSeqDict = {}
@@ -204,15 +205,22 @@ def calc_roc(test_pred, test_labels, predCutoff = 0.4):
   fp = 0
   tn = 0
   fn = 0
-  for i, pred in enumerate(test_pred):
-    if pred.item() > predCutoff and test_labels[i][0] == 1:
-      tp = tp + 1
-    elif pred.item() > predCutoff:
-      fp = fp + 1
-    elif test_labels[i][0] == 1:
-      fn = fn + 1
-    else:
-      tn = tn + 1
+  with open('testresults.txt', 'w+') as results:
+
+    for i, pred in enumerate(test_pred):
+      if pred.item() > predCutoff and test_labels[i][0] == 1:
+        results.write(str(test_labels[i][0]) + '\t' + str(pred.item()) + '\t' + 'TP' + '\n')
+        tp = tp + 1
+      elif pred.item() > predCutoff:
+        results.write(str(test_labels[i][0]) + '\t' + str(pred.item()) + '\t' + 'FP' + '\n')
+        fp = fp + 1
+      elif test_labels[i][0] == 1:
+        results.write(str(test_labels[i][0]) + '\t' + str(pred.item()) + '\t' + 'FN' + '\n')
+        fn = fn + 1
+      else:
+        results.write(str(test_labels[i][0]) + '\t' + str(pred.item()) + '\t' + 'TN' + '\n')
+        tn = tn + 1
+    results.close()
   return tp, fp, tn, fn
 
 
@@ -246,7 +254,6 @@ model = torch.nn.Sequential(
           torch.nn.Sigmoid()
         ).to(device)
 
-torch.save(model.state_dict(), modelPath)
 
 weights = torch.tensor([weightNonbinding, weightBinding], device=device)
 loss_fn = torch.nn.BCELoss(reduction='mean')
@@ -289,18 +296,54 @@ finalTP = tp
 finalFP = fp
 finalTN = tn
 finalFN = fn
-mcc = (finalTP * finalTN - finalFP * finalFN)/math.sqrt((finalTP + finalFP) * (finalTP + finalFN) * (finalTN + finalFP) * (finalTN + finalFN))
-prec = finalTP/(finalTP+finalFP)
-recall = finalTP/(finalTP + finalFN)
-print("TP: "+str(finalTP))
-print("FP: "+str(finalFP))
-print("TN: "+str(finalTN))
-print("FN: "+str(finalFN))
-print("TPR: "+str(finalTP/(finalTP+finalFN)))
-print("FPR: "+str(finalFP/(finalFP+finalTN)))
-print("Precision: "+str(prec))
-print("F1-score: " + str(2*(prec*recall)/(prec + recall)))
-print("MCC: "+str(mcc))
 
-runtime = time.time() - timer
-print("Runtime: ", runtime)
+with open('teststatistics.txt', 'w+') as stats:
+  stats.write("TP:" + '\t' + str(finalTP) + '\n')
+  print("TP: "+str(finalTP))
+  stats.write("FP:" + '\t' + str(finalFP) + '\n')
+  print("FP: "+str(finalFP))
+  stats.write("TN:" + '\t' + str(finalTN) + '\n')
+  print("TN: "+str(finalTN))
+  stats.write("FN:" + '\t' + str(finalFN) + '\n')
+  print("FN: "+str(finalFN))
+
+  if (finalFP+finalTN) != 0:
+    stats.write("FPR:" + '\t' + str(finalFP / (finalFP + finalTN)) + '\n')
+    print("FPR: "+str(finalFP/(finalFP+finalTN)))
+  else:
+    stats.write("FPR cannot be calculated (Division by zero)" + '\n')
+    print("FPR cannot be calculated (Division by zero)")
+  prec = 0
+  if finalTP+finalFP != 0:
+    prec = finalTP/(finalTP+finalFP)
+    stats.write("Precision:" + '\t' + str(prec) + '\n')
+    print("Precision: " + str(prec))
+  else:
+    stats.write("Precision cannot be calculated (Division by zero)" + '\n')
+    print("Precision cannot be calculated (Division by zero)")
+  recall = 0
+  if (finalTP + finalFN) != 0:
+    recall = finalTP/(finalTP + finalFN)
+    stats.write("Recall/TPR:" + '\t' + str(recall) + '\n')
+    print("Recall/TPR: " + str(recall))
+  else:
+    stats.write("Recall/TPR cannot be calculated (Division by zero)" + '\n')
+    print("Recall/TPR cannot be calculated (Division by zero)")
+  if prec + recall != 0:
+    stats.write("F1-score:" + '\t' + str(2*(prec*recall)/(prec + recall)) + '\n')
+    print("F1-score: " + str(2*(prec*recall)/(prec + recall)))
+  else:
+    stats.write("F1-score cannot be calculated (Division by zero)" + '\n')
+    print("F1-score cannot be calculated (Divion by zero)")
+  x = math.sqrt((finalTP + finalFP) * (finalTP + finalFN) * (finalTN + finalFP) * (finalTN + finalFN))
+  if x != 0:
+    mcc = (finalTP * finalTN - finalFP * finalFN)/x
+    stats.write("MCC:" + '\t' + str(mcc) + '\n')
+    print("MCC: "+str(mcc))
+  else:
+    stats.write("MCC cannot be calculated (Division by zero)" + '\n')
+    print("MCC can not be calculated (Division by Zero)")
+  stats.close()
+
+  runtime = time.time() - timer
+  print("Runtime: ", runtime)
