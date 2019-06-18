@@ -1,0 +1,12 @@
+Slides:
+Architecture overview
+feature vector makeup
+blosum normalization
+confusion matrix
+coverage and F1 score
+include comparison to random
+compare validation to trained data -> over/underfit?
+
+Plot ideas:
+mcc vs epochs - epochs should be high enough to observe overfitting
+hyperparameter optimization
