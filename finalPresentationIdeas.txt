@@ -1,13 +1,13 @@
 Slides:
-Thomas: Architecture overview
-Thomas: feature vector makeup
-Thomas: First attempt using blosum cutoffs
-Thomas: second attempt with raw scores
-Thomas: third attempt with blosum normalization
-Thomas: confusion matrix
-Thomas: coverage and F1 score
-Thomas: include comparison to random
-Thomas: compare validation to trained data -> over/underfit?
+Architecture overview
+feature vector makeup
+First attempt using blosum cutoffs
+second attempt with raw scores
+third attempt with blosum normalization
+Thomas E: confusion matrix
+Thomas H: coverage and F1 score
+Thomas E: include comparison to random
+Thomas H: compare validation to trained data -> over/underfit?
 
 Plot ideas:
 Paul - mcc vs epochs - epochs should be high enough to observe overfitting
