@@ -243,7 +243,6 @@ def calc_roc(test_pred, test_labels, predCutoff = 0.4):
     results.close()
   return tp, fp, tn, fn
 
-
 if pickleFileTrain and pickleFileLabel:
   with open (pickleFileTrain, 'rb') as pft:
     train = pickle.load(pft)

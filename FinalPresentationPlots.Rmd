@@ -1,0 +1,61 @@
+---
+title: "ProteinPrediction1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Final Presentation
+
+```{r}
+library(ggplot2)
+library(data.table)
+setwd('/Users/paulhager/Documents/Uni/ProteinPrediction1/ProteinPrediction1/')
+```
+
+Epochs versus MCC
+
+```{r}
+epochMCCRaw <- read.csv('epochMCC.csv')
+epochMCCDT <- as.data.table(epochMCCRaw)
+epochMCCDT
+sp <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=MCC, colour = "MCC")) 
+sp
+# We could label where our grid search returns the best results with a vline, but it may be easier to just explain without
+#sp + geom_vline(xintercept=380)
+
+# We cen also include how the cutoff changed
+sp2 <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=Cutoff, colour = "Cutoff"))
+sp2
+
+```
+
+Grid Search
+
+```{r}
+library(gridExtra)
+paramGridSearchRaw <- read.csv('allParams.csv')
+paramGridSearchDT <- as.data.table(paramGridSearchRaw)
+paramGridSearchDT
+base <- ggplot(paramGridSearchDT, aes(y=MCC))
+batchSize <- base + geom_point(aes(x=BatchSize)) + geom_smooth(aes(x=BatchSize),method="lm")
+hiddenNodes <- base + geom_point(aes(x=HiddenNodes)) + geom_smooth(aes(x=HiddenNodes),method="lm")
+weightNonBinding <- base + geom_point(aes(x=WeightNonbinding)) + geom_smooth(aes(x=WeightNonbinding),method="lm")
+weightBinding <- base + geom_point(aes(x=WeightBinding)) + geom_smooth(aes(x=WeightBinding), method="lm")
+learningRate <- base + geom_point(aes(x=LearningRate)) + geom_smooth(aes(x=LearningRate), method="lm")
+epochs <- base + geom_point(aes(x=Epochs)) + geom_smooth(aes(x=Epochs), method="lm")
+momentum <- base + geom_point(aes(x=Momentum)) + geom_smooth(aes(x=Momentum), method="lm")
+cutoff <- base + geom_point(aes(x=BestCutoff)) + geom_smooth(aes(x=BestCutoff), method="lm")
+
+batchSize
+hiddenNodes
+weightNonBinding
+weightBinding
+learningRate
+epochs
+momentum
+cutoff
+grid.arrange(batchSize, hiddenNodes, weightNonBinding, weightBinding, learningRate, epochs, momentum, cutoff)
+```
