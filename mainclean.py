@@ -293,6 +293,7 @@ if testmode == False:
     train_labels = labels[:100000]
     test_data = train[100000:]
     test_labels = labels[100000:]
+    # for random Dataset, ignore otherwise
     # rand = randomDataset.random_Dataset()
     # test_labels, test_data = rand.TestSet()
 
