@@ -7,6 +7,7 @@ import math
 from Bio.SubsMat import MatrixInfo as matrices
 import time
 import copy
+import randomDataset
 
 timer = time.time()
 batchSize = 1000
@@ -22,6 +23,8 @@ momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
 
+torch.manual_seed(13)
+
 trainedModelPath = 'trainedModel.pickle'
 
 parser = argparse.ArgumentParser(description='Load and analyse protein binding site data')
@@ -31,6 +34,7 @@ parser.add_argument('--bindingResidues', help = "Path to binding residues files"
 parser.add_argument('--pickleTrain', help = "Path to pickle file with train data structures", type=str)
 parser.add_argument('--pickleLabel', help = "Path to pickle file with label data structures", type=str)
 parser.add_argument('--trainedModel', help='Path to pre-trained model', type=str)
+parser.add_argument('--randomData', help='creates a random Dataset', type = bool)
 
 args = parser.parse_args()
 
@@ -40,11 +44,15 @@ bindingResiduesFile = args.bindingResidues
 pickleFileTrain = args.pickleTrain
 pickleFileLabel = args.pickleLabel
 trainedmodel = args.trainedModel
+randomData = args.randomData
 if trainedmodel != None:
     testmode = True
 else:
     testmode = False
-
+if randomData == None:
+  randomMode = False
+else:
+  randomMode = randomData
 blosum62 = copy.deepcopy(matrices.blosum62)
 blosum62scaled = copy.deepcopy(matrices.blosum62)
 blosumCutoffsDict = {
@@ -159,10 +167,10 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosum62scaled, blosumCutoffsDict)
             secondAA = mutAAid
           features2.append(score)
           features2.append(blosum62scaled[(firstAA, secondAA)])
-          #if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
-          #  features.append(1)
-          #else:
-          #  features.append(-1)
+          if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
+           features.append(1)
+          else:
+           features.append(-1)
   return snapScoreDict, snapConfDict, featureDict, feature2Dict
 
 def loadBindingResidues(bindingResiduesFile):
@@ -223,13 +231,12 @@ def calc_roc(test_pred, test_labels, predCutoff = 0.4):
     results.close()
   return tp, fp, tn, fn
 
-
-if pickleFileTrain and pickleFileLabel:
+if pickleFileTrain and pickleFileLabel and not randomMode:
   with open (pickleFileTrain, 'rb') as pft:
     train = pickle.load(pft)
   with open (pickleFileLabel, 'rb') as pfl:
     labels = pickle.load(pfl)
-else:
+elif not randomMode:
   bindingDict = loadBindingResidues(bindingResiduesFile)
   proteinSeqDict = loadFastaFiles(fastaFolder)
   snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosum62scaled, blosumCutoffsDict)
@@ -241,11 +248,14 @@ else:
   # train = with cutoff
   # train2 = raw data (blosum & SNAP2)
   train = train2
+else:
+  rand = randomDataset.random_Dataset()
+  labels, train = rand.TrainSet()
 
 print("Finished preparing data")
 
 
-D_in, H, D_out = 40, hiddenLayers, 1
+D_in, H, D_out = len(train[0]), hiddenLayers, 1
 
 model = torch.nn.Sequential(
           torch.nn.Linear(D_in, H),
@@ -261,10 +271,19 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momen
 
 
 if testmode == False:
-  train_data = train # [:100000]
-  train_labels = labels # [:100000]
-  test_data = train[100000:]
-  test_labels = labels[100000:]
+  if not randomMode:
+    train_data = train[:100000]
+    train_labels = labels[:100000]
+    test_data = train[100000:]
+    test_labels = labels[100000:]
+    # rand = randomDataset.random_Dataset()
+    # test_labels, test_data = rand.TestSet()
+
+  else:
+    # rand = randomDataset.random_Dataset()
+    train_data = train
+    train_labels = labels
+    test_labels, test_data = rand.TestSet()
 
   trainTensors = torch.tensor(train_data, dtype=torch.float)
   labelTensors = torch.tensor(train_labels, dtype=torch.float)
@@ -297,7 +316,7 @@ finalFP = fp
 finalTN = tn
 finalFN = fn
 
-with open('teststatistics.txt', 'w+') as stats:
+with open('teststatisticsOnes.txt', 'w+') as stats:
   stats.write("TP:" + '\t' + str(finalTP) + '\n')
   print("TP: "+str(finalTP))
   stats.write("FP:" + '\t' + str(finalFP) + '\n')
