@@ -11,6 +11,7 @@ import math
 from Bio.SubsMat import MatrixInfo as matrices
 import time
 import copy
+torch.manual_seed(0)
 
 timer = time.time()
 batchSize = 1000
@@ -18,7 +19,7 @@ hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 3e-3
-epochs = 20
+epochs = 2
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
@@ -301,12 +302,10 @@ NN = NeuralNetwork.Neural_Network()
 D_in, H, D_out = 40, hiddenLayers, 1
 
 model = torch.nn.Sequential(
-          torch.nn.Conv1d(D_in, 32, kernel_size = 7, stride = 1, padding = 3),
+          torch.nn.Conv1d(D_in, 10, kernel_size = 9, stride = 1, padding = 4),
           torch.nn.Sigmoid(),
-          torch.nn.Conv1d(32, 1, kernel_size = 5, stride = 1, padding = 2),
+          torch.nn.Conv1d(10, 1, kernel_size = 5, stride = 1, padding = 2),
           torch.nn.Sigmoid(),
-          torch.nn.Linear(1, D_out),
-          torch.nn.Sigmoid()
         ).to(device)
 
 torch.save(model.state_dict(), modelPath)
