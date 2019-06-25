@@ -80,7 +80,6 @@ blosumScalingDict = {
   2 : 66,
   3 : 100
 }
-
 for key in blosum62scaled:
   if blosum62scaled[key] in blosumScalingDict:
     blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
@@ -239,7 +238,8 @@ def distributionPlots(train):
   plt.tight_layout()
   g.savefig('DistributionofSnapscores.png')
   h = plt.figure(3)
-  plt.hist(blosumscores, bins=8)
+  bins = [-4, -3, -2, -1, 0, 1, 2, 3]
+  plt.hist(blosumscores, bins=bins)
   plt.title('Distribution of BLOSUM62-scores')
   plt.xlabel('BLOSUM62-score')
   plt.ylabel('Occurences in the Dataset')
