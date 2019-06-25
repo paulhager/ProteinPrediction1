@@ -10,6 +10,8 @@ import time
 import copy
 import randomDataset
 import matplotlib.pyplot as plt
+import random
+import statistics
 
 timer = time.time()
 batchSize = 1000
@@ -234,13 +236,83 @@ def distributionPlots(train):
   plt.title('Distribution single of Snap-scores')
   plt.xlabel('Snap-score')
   plt.ylabel('Occurences in the Dataset')
+  plt.tight_layout()
   g.savefig('DistributionofSnapscores.png')
   h = plt.figure(3)
   plt.hist(blosumscores, bins=8)
   plt.title('Distribution of BLOSUM62-scores')
   plt.xlabel('BLOSUM62-score')
   plt.ylabel('Occurences in the Dataset')
+  plt.tight_layout()
   h.savefig('DistributionofBlosumscores.png')
+
+def bootstrapper(resultpath):
+  labs = []
+  predictions = []
+  with open(resultpath, 'r') as f:
+    for line in f:
+      line = line.split('\t')
+      labs.append(line[0])
+      predictions.append(line[1])
+  f.close()
+  allmccs = []
+  errorcount = 0
+  for j in range(1000):
+    new_lab = []
+    new_pred = []
+    for i in range(1000):
+      num = random.randint(0, len(labs) - 1)
+      new_lab.append([float(labs[num])])
+      new_pred.append(float(predictions[num]))
+    new_pred = torch.FloatTensor(new_pred)
+    tp, fp, tn, fn = calc_roc(new_pred, new_lab)
+    x = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    if x != 0:
+      mcc = (tp * tn - fp * fn) / x
+      allmccs.append(mcc)
+    else:
+      errorcount += 1
+  stderr = statistics.stdev(allmccs)
+  print('bootstrapping errors:', errorcount)
+  return stderr
+
+def randomPredictor(testresultsPath):
+  labs = []
+  randpreds = []
+  tp = 0
+  tn = 0
+  fp = 0
+  fn = 0
+  ls = [0] * 92 + [1]*8
+  with open(testresultsPath, 'r') as f:
+    for line in f:
+      line = line.split('\t')
+      labs.append(int(line[0]))
+  f.close()
+  for i in range(len(labs)):
+    randpreds.append(random.choice(ls))
+  for j in range(len(labs)):
+    if labs[j] == randpreds[j]:
+      if labs[j] == 0:
+        tn += 1
+      else:
+        tp += 1
+    else:
+      if labs[j] == 0:
+        fp += 1
+      else:
+        fn += 1
+
+  print('Randompredictions')
+  print('TP:', tp)
+  print('FP:', fp)
+  print('TN:', tn)
+  print('FN:', fn)
+  x = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+  if x != 0:
+    mcc = (tp * tn - fp * fn) / x
+    print(mcc)
+  print('End randompredictions')
 
 def calc_roc(test_pred, test_labels, predCutoff = 0.4):
   tp = 0
@@ -355,6 +427,13 @@ finalTP = tp
 finalFP = fp
 finalTN = tn
 finalFN = fn
+
+distributionPlots(train)
+
+randomPredictor('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
+
+stderr = bootstrapper('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
+print('stderr:', stderr)
 
 with open('teststatistics.txt', 'w+') as stats:
   stats.write("TP:" + '\t' + str(finalTP) + '\n')
