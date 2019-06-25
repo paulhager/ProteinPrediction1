@@ -21,13 +21,14 @@ Epochs versus MCC
 epochMCCRaw <- read.csv('epochMCC.csv')
 epochMCCDT <- as.data.table(epochMCCRaw)
 epochMCCDT
-sp <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=MCC, colour = "MCC")) 
+
+sp <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=MCC, colour = "MCC"), show.legend = FALSE) 
 sp
 # We could label where our grid search returns the best results with a vline, but it may be easier to just explain without
 #sp + geom_vline(xintercept=380)
 
 # We cen also include how the cutoff changed
-sp2 <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=Cutoff, colour = "Cutoff"))
+sp2 <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=Cutoff, colour = "Cutoff"), show.legend = FALSE)
 sp2
 
 ```
