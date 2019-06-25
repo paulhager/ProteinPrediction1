@@ -458,7 +458,7 @@ if optimize:
           for momentum in range(9, 7, -1):
             momentum = momentum/10
             cutoff, tp, fp, tn, fn, mcc = trainParamOptimizer(batchSize, hiddenNodes, weightNonbinding, weightBindinglearning_rate, epochs, momentum, train_data, train_labels, test_data, test_labels)
-            f1 = open('/home/h/hagerp/ProteinPrediction/ProteinPrediction1/allParams_'+hiddenNodes+'.txt', 'a')
+            f1 = open('/home/h/hagerp/ProteinPrediction/ProteinPrediction1/allParams_'+str(hiddenNodes)+'.txt', 'a')
             f1.write("\nbatchSize: "+str(batchSize))
             f1.write("\nhiddenNodes: "+str(hiddenNodes))
             f1.write("\nweightNonbinding: "+str(weightNonbinding))
@@ -481,7 +481,7 @@ if optimize:
               bestTN = tn
               bestFN = fn
               bestCutoff = cutoff
-              f = open('/home/h/hagerp/ProteinPrediction/ProteinPrediction1/BestParams_'+hiddenNodes+'.txt', 'w')
+              f = open('/home/h/hagerp/ProteinPrediction/ProteinPrediction1/BestParams_'+str(hiddenNodes)+'.txt', 'w')
               f.write("batchSize: "+str(batchSize))
               f.write("\nhiddenNodes: "+str(hiddenNodes))
               f.write("\nweightNonbinding: "+str(weightNonbinding))
