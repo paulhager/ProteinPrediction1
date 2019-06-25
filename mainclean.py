@@ -7,6 +7,7 @@ import math
 from Bio.SubsMat import MatrixInfo as matrices
 import time
 import copy
+import randomDataset
 import matplotlib.pyplot as plt
 
 timer = time.time()
@@ -15,13 +16,15 @@ hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 3e-3
-epochs = 101
+epochs = 200
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
 momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
+
+torch.manual_seed(13)
 
 trainedModelPath = 'trainedModel.pickle'
 
@@ -32,10 +35,8 @@ parser.add_argument('--bindingResidues', help = "Path to binding residues files"
 parser.add_argument('--pickleTrain', help = "Path to pickle file with train data structures", type=str)
 parser.add_argument('--pickleLabel', help = "Path to pickle file with label data structures", type=str)
 parser.add_argument('--trainedModel', help='Path to pre-trained model', type=str)
+parser.add_argument('--randomData', help='creates a random Dataset', type = bool)
 
-#fasta = 'D:\\MasterDocs\\PRotPred\\fasta_seqs'
-#snap = 'D:\\MasterDocs\\PRotPred\\snap#'
-#bind = 'D:\\MasterDocs\\PRotPred\\bindpredic\\bindpredic.txt'
 args = parser.parse_args()
 
 fastaFolder = args.fastaFolder
@@ -44,11 +45,15 @@ bindingResiduesFile = args.bindingResidues
 pickleFileTrain = args.pickleTrain
 pickleFileLabel = args.pickleLabel
 trainedmodel = args.trainedModel
+randomData = args.randomData
 if trainedmodel != None:
     testmode = True
 else:
     testmode = False
-
+if randomData == None:
+  randomMode = False
+else:
+  randomMode = randomData
 blosum62 = copy.deepcopy(matrices.blosum62)
 blosum62scaled = copy.deepcopy(matrices.blosum62)
 blosumCutoffsDict = {
@@ -163,10 +168,10 @@ def loadSnapCalcFeature(snapFolder, blosum62, blosum62scaled, blosumCutoffsDict)
             secondAA = mutAAid
           features2.append(score)
           features2.append(blosum62scaled[(firstAA, secondAA)])
-          #if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
-          #  features.append(1)
-          #else:
-          #  features.append(-1)
+          if score > blosumCutoffsDict[blosum62[(firstAA, secondAA)]]:
+           features.append(1)
+          else:
+           features.append(-1)
   return snapScoreDict, snapConfDict, featureDict, feature2Dict
 
 def loadBindingResidues(bindingResiduesFile):
@@ -209,7 +214,7 @@ def validate(test_data,target, model, epoch):
         test_pred = model(testDataTensors)
         loss = torch.sqrt(torch.nn.functional.binary_cross_entropy(test_pred, target))
         print('Validation loss after epoch {} is {:.2}'.format(epoch, loss))
-        #tp, fp, tn, fn = calc_roc(test_pred, test_labels, predCutoff)    
+        #tp, fp, tn, fn = calc_roc(test_pred, test_labels, predCutoff)
     return loss
 
 def create_plots(val_loss_list,train_loss_list):
@@ -218,8 +223,8 @@ def create_plots(val_loss_list,train_loss_list):
     plt.legend()
     plt.title('Loss')
     plt.xlabel('Number of epochs')
-    plt.ylabel('Model loss') 
-    
+    plt.ylabel('Model loss')
+
 def calc_roc(test_pred, test_labels, predCutoff = 0.4):
   tp = 0
   fp = 0
@@ -243,12 +248,12 @@ def calc_roc(test_pred, test_labels, predCutoff = 0.4):
     results.close()
   return tp, fp, tn, fn
 
-if pickleFileTrain and pickleFileLabel:
+if pickleFileTrain and pickleFileLabel and not randomMode:
   with open (pickleFileTrain, 'rb') as pft:
     train = pickle.load(pft)
   with open (pickleFileLabel, 'rb') as pfl:
     labels = pickle.load(pfl)
-else:
+elif not randomMode:
   bindingDict = loadBindingResidues(bindingResiduesFile)
   proteinSeqDict = loadFastaFiles(fastaFolder)
   snapScoreDict, snapConfDict, featureDict, feature2Dict = loadSnapCalcFeature(snapFolder, blosum62, blosum62scaled, blosumCutoffsDict)
@@ -260,11 +265,14 @@ else:
   # train = with cutoff
   # train2 = raw data (blosum & SNAP2)
   train = train2
+else:
+  rand = randomDataset.random_Dataset()
+  labels, train = rand.TrainSet()
 
 print("Finished preparing data")
 
 
-D_in, H, D_out = 40, hiddenLayers, 1
+D_in, H, D_out = len(train[0]), hiddenLayers, 1
 
 model = torch.nn.Sequential(
           torch.nn.Linear(D_in, H),
@@ -280,16 +288,26 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momen
 
 
 if testmode == False:
-  train_data = train # [:100000]
-  train_labels = labels # [:100000]
-  test_data = train[100000:]
-  test_labels = labels[100000:]
+  if not randomMode:
+    train_data = train[:100000]
+    train_labels = labels[:100000]
+    test_data = train[100000:]
+    test_labels = labels[100000:]
+    # for random Dataset, ignore otherwise
+    # rand = randomDataset.random_Dataset()
+    # test_labels, test_data = rand.TestSet()
+
+  else:
+    # rand = randomDataset.random_Dataset()
+    train_data = train
+    train_labels = labels
+    test_labels, test_data = rand.TestSet()
 
   trainTensors = torch.tensor(train_data, dtype=torch.float)
   labelTensors = torch.tensor(train_labels, dtype=torch.float)
   train_and_labels = TensorDataset(trainTensors, labelTensors)
   trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
-  
+
   val_loss_list = []
   train_loss_list = []
   for t in range(epochs):
@@ -303,8 +321,8 @@ if testmode == False:
       optimizer.zero_grad()
       loss.backward()
       optimizer.step()
-          
-    if t % 10 == 0:  
+
+    if t % 10 == 0:
       train_loss = sum(loss_list)/len(loss_list)
       print('Training loss after epoch {} is {:.2}'.format(t, train_loss))
       val_loss = validate(test_data,test_labels, model, t)
@@ -312,7 +330,7 @@ if testmode == False:
       train_loss_list.append((train_loss,t))
   create_plots(val_loss_list,train_loss_list)
   torch.save(model.state_dict(), trainedModelPath)
-  
+
 else:
   test_data = train
   test_labels = labels
