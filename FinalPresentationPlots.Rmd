@@ -36,7 +36,8 @@ Grid Search
 
 ```{r}
 library(gridExtra)
-paramGridSearchRaw <- read.csv('allParams.csv')
+library(dplyr) 
+paramGridSearchRaw <- read.csv('allParams_both.csv')
 paramGridSearchDT <- as.data.table(paramGridSearchRaw)
 paramGridSearchDT
 base <- ggplot(paramGridSearchDT, aes(y=MCC))

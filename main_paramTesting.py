@@ -12,6 +12,8 @@ from Bio.SubsMat import MatrixInfo as matrices
 import time
 import copy
 
+torch.manual_seed(13)
+
 timer = time.time()
 batchSize = 1000
 hiddenNodes = 200
@@ -441,11 +443,11 @@ else:
   test_data = train[100000:]
   test_labels = labels[100000:]
 
-learningRates = [5e-3, 1e-3, 5e-4, 1e-4, 5e-5, 1e-5, 5e-6, 1e-6]
+learningRates = [1e-2, 5e-3, 1e-3, 5e-4, 1e-4]
 #learningRates = [5e-4]
 
 if optimize:
-  bestMCC = 0
+  bestMCC = 0.2212613697028626
   for batchSize in range(500, 1001, 500):
     for hiddenNodes in range(20, 501, 80):
       for weightNonbinding in range(1, 10, 1):
@@ -453,16 +455,26 @@ if optimize:
         for weightBinding in range(1, 10, 1):
           weightBinding = weightBinding/10
           for learning_rate in learningRates:
-            for epochs in range(20, 421, 60):
-              for momentum in range(1, 10, 1):
+            for epochs in range(400, 521, 60):
+              for momentum in range(8, 10, 1):
                 momentum = momentum/10
                 cutoff, tp, fp, tn, fn, mcc = trainParamOptimizer(batchSize, hiddenNodes, weightNonbinding, weightBinding, learning_rate, epochs, momentum, train_data, train_labels, test_data, test_labels)
-                print("Best cutoff: "+str(cutoff))
-                print("TP: "+str(tp))
-                print("FP: "+str(fp))
-                print("TN: "+str(tn))
-                print("FN: "+str(fn))
-                print("MCC: "+str(mcc))
+                f1 = open('/home/h/hagerp/ProteinPrediction/ProteinPrediction1/allParams.txt', 'a')
+                f1.write("\nbatchSize: "+str(batchSize))
+                f1.write("\nhiddenNodes: "+str(hiddenNodes))
+                f1.write("\nweightNonbinding: "+str(weightNonbinding))
+                f1.write("\nweightBinding: "+str(weightBinding))
+                f1.write("\nlearning_rate: "+str(learning_rate))
+                f1.write("\nepochs: "+str(epochs))
+                f1.write("\nmomentum: "+str(momentum))
+                f1.write("\nBest cutoff: "+str(cutoff))
+                f1.write("\nTP: "+str(tp))
+                f1.write("\nFP: "+str(fp))
+                f1.write("\nTN: "+str(tn))
+                f1.write("\nFN: "+str(fn))
+                f1.write("\nMCC: "+str(mcc))
+                f1.write("\n-----")
+                f1.close()
                 if mcc > bestMCC:
                   bestMCC = mcc
                   bestTP = tp

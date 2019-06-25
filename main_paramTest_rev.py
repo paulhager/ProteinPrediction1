@@ -12,6 +12,8 @@ from Bio.SubsMat import MatrixInfo as matrices
 import time
 import copy
 
+torch.manual_seed(13)
+
 timer = time.time()
 batchSize = 1000
 hiddenNodes = 200
@@ -458,7 +460,7 @@ if optimize:
               for momentum in range(9, 0, -1):
                 momentum = momentum/10
                 cutoff, tp, fp, tn, fn, mcc = trainParamOptimizer(batchSize, hiddenNodes, weightNonbinding, weightBinding, learning_rate, epochs, momentum, train_data, train_labels, test_data, test_labels)
-                f1 = open('/home/h/hagerp/ProteinPrediction/ProteinPrediction1/allParams.txt', 'a')
+                f1 = open('/home/h/hagerp/ProteinPrediction/ProteinPrediction1/allParams_rev.txt', 'a')
                 f1.write("\nbatchSize: "+str(batchSize))
                 f1.write("\nhiddenNodes: "+str(hiddenNodes))
                 f1.write("\nweightNonbinding: "+str(weightNonbinding))
