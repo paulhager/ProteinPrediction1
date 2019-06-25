@@ -457,7 +457,7 @@ if optimize:
         for epochs in range(500, 379, -60):
           for momentum in range(9, 7, -1):
             momentum = momentum/10
-            cutoff, tp, fp, tn, fn, mcc = trainParamOptimizer(batchSize, hiddenNodes, weightNonbinding, weightBindinglearning_rate, epochs, momentum, train_data, train_labels, test_data, test_labels)
+            cutoff, tp, fp, tn, fn, mcc = trainParamOptimizer(batchSize, hiddenNodes, weightNonbinding, weightBinding, learning_rate, epochs, momentum, train_data, train_labels, test_data, test_labels)
             f1 = open('/home/h/hagerp/ProteinPrediction/ProteinPrediction1/allParams_'+str(hiddenNodes)+'.txt', 'a')
             f1.write("\nbatchSize: "+str(batchSize))
             f1.write("\nhiddenNodes: "+str(hiddenNodes))
