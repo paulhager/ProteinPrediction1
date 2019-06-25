@@ -11,19 +11,19 @@ import randomDataset
 import matplotlib.pyplot as plt
 
 timer = time.time()
-batchSize = 1000
+printafterepoch = 2
+batchSize = 20
 hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 3e-3
-epochs = 200
+epochs = 20
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
 momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
-
 torch.manual_seed(13)
 
 trainedModelPath = 'trainedModel.pickle'
@@ -207,16 +207,45 @@ def prepareData(featureDict, feature2Dict, bindingDict):
     return train, train2, train_labels
 
 
-def validate(test_data,target, model, epoch):
+def validate(test_data,target, model, epoch, weight):
     with torch.no_grad():
         target = torch.Tensor(target)
         testDataTensors = torch.tensor(test_data, dtype=torch.float)
         test_pred = model(testDataTensors)
-        loss = torch.sqrt(torch.nn.functional.binary_cross_entropy(test_pred, target))
-        print('Validation loss after epoch {} is {:.2}'.format(epoch, loss))
-        #tp, fp, tn, fn = calc_roc(test_pred, test_labels, predCutoff)
-    return loss
+        loss = torch.nn.functional.binary_cross_entropy(test_pred, target, weight=weight)
+        f1 = calc_f1(test_pred, test_labels)
+        print('Validation loss after epoch {} is {:.2}. F1-score is {:.4}'.format(epoch, loss, f1))
+    return loss, f1
 
+def create_plots(val_loss_list,train_loss_list, f1_loss):
+    plt.figure()
+    plt.plot([x[1] for x in val_loss_list], [x[0] for x in val_loss_list],  label='Loss of the validation data')
+    plt.plot([x[1] for x in train_loss_list], [x[0] for x in train_loss_list],  label='Loss of the train data')
+    plt.legend()
+    plt.title('Loss')
+    plt.xlabel('Number of epochs')
+    plt.ylabel('Model loss')
+    plt.figure()
+    plt.plot([x[2] for x in f1_loss], [x[0] for x in f1_loss],  label='F1-score of the validation data')
+    plt.plot([x[2] for x in f1_loss], [x[1] for x in f1_loss],  label='F1-score of the train data')
+    plt.legend()
+    plt.title('F1-score')
+    plt.xlabel('Number of epochs')
+    plt.ylabel('Model F1-score')
+    
+def calc_f1 (test_pred, test_labels):
+  TP, FP, TN, FN = calc_roc_nowrite(test_pred, test_labels)
+  recall = 0
+  prec = 0
+  f1 = 0
+  if (TP + FP) != 0:
+    prec = TP/(TP + FP)
+  if (TP + FN) != 0:
+    recall = TP/(TP + FN)
+  if (prec + recall) != 0:
+    f1 = 2*(prec*recall)/(prec + recall)
+  return f1
+    
 def calc_roc(test_pred, test_labels, predCutoff = 0.4):
   tp = 0
   fp = 0
@@ -238,6 +267,22 @@ def calc_roc(test_pred, test_labels, predCutoff = 0.4):
         results.write(str(test_labels[i][0]) + '\t' + str(pred.item()) + '\t' + 'TN' + '\n')
         tn = tn + 1
     results.close()
+  return tp, fp, tn, fn
+
+def calc_roc_nowrite(test_pred, test_labels, predCutoff = 0.4):
+  tp = 0
+  fp = 0
+  tn = 0
+  fn = 0 
+  for i, pred in enumerate(test_pred):
+    if pred.item() > predCutoff and test_labels[i][0] == 1:
+      tp = tp + 1
+    elif pred.item() > predCutoff:
+      fp = fp + 1
+    elif test_labels[i][0] == 1:
+      fn = fn + 1
+    else:
+      tn = tn + 1
   return tp, fp, tn, fn
 
 if pickleFileTrain and pickleFileLabel and not randomMode:
@@ -300,8 +345,12 @@ if testmode == False:
   train_and_labels = TensorDataset(trainTensors, labelTensors)
   trainloader = DataLoader(train_and_labels, batch_size=batchSize, shuffle=True)
 
+  val_loss_list = []
+  train_loss_list = []
+  f1_comp_list = []
   for t in range(epochs):
     loss_list = []
+    f1_list = []
     for i, data in enumerate(trainloader):
       train_batch, labels_batch = data
       y_pred = model(train_batch)
@@ -311,11 +360,18 @@ if testmode == False:
       optimizer.zero_grad()
       loss.backward()
       optimizer.step()
-
-    if t % 10 == 0:
+      f1 = calc_f1(y_pred, labels_batch)
+      f1_list.append(f1)
+      
+    if t % printafterepoch == 0:
       train_loss = sum(loss_list)/len(loss_list)
-      print('Training loss after epoch {} is {:.2}'.format(t, train_loss))
-      val_loss = validate(test_data,test_labels, model, t)
+      f1_ave = sum(f1_list)/len(f1_list)
+      print('Training loss after epoch {} is {:.2}. F1-score is {:.4}'.format(t, train_loss,f1_ave))
+      val_loss, f1_val = validate(test_data,test_labels, model, t, weights[test_labels])
+      val_loss_list.append((val_loss,t))
+      train_loss_list.append((train_loss,t))
+      f1_comp_list.append((f1_ave,f1_val, t))
+  create_plots(val_loss_list,train_loss_list, f1_comp_list)
   torch.save(model.state_dict(), trainedModelPath)
 
 else:
