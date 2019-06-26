@@ -18,8 +18,8 @@ batchSize = 1000
 hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
-learning_rate = 3e-3
-epochs = 200
+learning_rate = 0.01
+epochs = 500
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
@@ -80,9 +80,9 @@ blosumScalingDict = {
   2 : 66,
   3 : 100
 }
-# for key in blosum62scaled:
-#   if blosum62scaled[key] in blosumScalingDict:
-#     blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
+for key in blosum62scaled:
+  if blosum62scaled[key] in blosumScalingDict:
+    blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
 
 
 def loadFastaFiles(fastaFolder):
