@@ -80,9 +80,9 @@ blosumScalingDict = {
   2 : 66,
   3 : 100
 }
-for key in blosum62scaled:
-  if blosum62scaled[key] in blosumScalingDict:
-    blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
+# for key in blosum62scaled:
+#   if blosum62scaled[key] in blosumScalingDict:
+#     blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
 
 
 def loadFastaFiles(fastaFolder):
@@ -239,7 +239,11 @@ def distributionPlots(train):
   g.savefig('DistributionofSnapscores.png')
   h = plt.figure(3)
   bins = [-4, -3, -2, -1, 0, 1, 2, 3]
-  plt.hist(blosumscores, bins=bins)
+  height = []
+  for i in bins:
+    z = blosumscores.count(i)
+    height.append(z)
+  plt.bar(bins, height)
   plt.title('Distribution of BLOSUM62-scores')
   plt.xlabel('BLOSUM62-score')
   plt.ylabel('Occurences in the Dataset')
