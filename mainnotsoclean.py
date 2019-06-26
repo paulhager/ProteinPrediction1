@@ -256,6 +256,9 @@ def bootstrapper(resultpath):
       predictions.append(line[1])
   f.close()
   allmccs = []
+  allprec = []
+  allrecall = []
+  allf1 = []
   errorcount = 0
   for j in range(1000):
     new_lab = []
@@ -272,9 +275,21 @@ def bootstrapper(resultpath):
       allmccs.append(mcc)
     else:
       errorcount += 1
-  stderr = statistics.stdev(allmccs)
+    if tp + fp != 0:
+      prec = tp / (tp + fp)
+      allprec.append(prec)
+    if tp + fn != 0:
+      recall = tp / (tp + fn)
+      allrecall.append(recall)
+    if prec + recall != 0:
+      f1 = 2 * (prec * recall) / (prec + recall)
+      allf1.append(f1)
+  stderrmcc = statistics.stdev(allmccs)
+  stderrprec = statistics.stdev(allprec)
+  stderrrecall = statistics.stdev(allrecall)
+  stderrf1 = statistics.stdev(allf1)
   print('bootstrapping errors:', errorcount)
-  return stderr
+  return stderrmcc, stderrprec, stderrrecall, stderrf1
 
 def randomPredictor(testresultsPath):
   labs = []
@@ -432,8 +447,11 @@ distributionPlots(train)
 
 randomPredictor('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
 
-stderr = bootstrapper('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
-print('stderr:', stderr)
+stderrmcc, stderrprec, stderrrecall, stderrf1 = bootstrapper('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
+print('stderrMCC:', stderrmcc)
+print('stderr Precision:', stderrprec)
+print('stderr Recall:', stderrrecall)
+print('Stderr F1:', stderrf1)
 
 with open('teststatistics.txt', 'w+') as stats:
   stats.write("TP:" + '\t' + str(finalTP) + '\n')
