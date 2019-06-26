@@ -11,6 +11,8 @@ import math
 from Bio.SubsMat import MatrixInfo as matrices
 import time
 import copy
+import random
+import statistics
 
 timer = time.time()
 batchSize = 1000
@@ -391,6 +393,54 @@ if crossValidation:
   print("Precision: "+str(allTP/(allTP+allFP)))
   print("MCC: "+str(((allTP*allTN)-(allFP*allFN))/(math.sqrt((allTP+allFP)*(allTP+allFN)*(allTN+allFP)*(allTN+allFN)))))
 
+  allmccs = []
+  allprec = []
+  allrecall = []
+  allf1 = []
+  errorcount = 0
+
+  allscores = ['tp'] * allTP  + ['tn'] * allTN + ['fn'] * allFN + ['fp'] * allFP
+  for i in range(1000):
+    choice = []
+    tp = 0
+    fp = 0
+    fn = 0
+    tn = 0
+    for j in range(1000):
+      choice.append(random.choice(allscores))
+    for i in choice:
+      if i == 'tp':
+        tp += 1
+      elif i == 'tn':
+        tn += 1
+      elif i == 'fp':
+        fp += 1
+      else:
+        fn += 1
+    x = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    if x != 0:
+      mcc = (tp * tn - fp * fn) / x
+      allmccs.append(mcc)
+    else:
+      errorcount += 1
+    if tp + fp != 0:
+      prec = tp / (tp + fp)
+      allprec.append(prec)
+    if tp + fn != 0:
+      recall = tp / (tp + fn)
+      allrecall.append(recall)
+    if prec + recall != 0:
+      f1 = 2 * (prec * recall) / (prec + recall)
+      allf1.append(f1)
+  stderrmcc = statistics.stdev(allmccs)
+  stderrprec = statistics.stdev(allprec)
+  stderrrecall = statistics.stdev(allrecall)
+  stderrf1 = statistics.stdev(allf1)
+  print('stderrmcc:', stderrmcc)
+  print('stderrf1:', stderrf1)
+  print('stderrprec:', stderrprec)
+  print('stderrrecall:', stderrrecall)
+
 else:
   if testmode == False:
     train_data = train[:100000]
@@ -443,10 +493,17 @@ else:
   print("FP: "+str(finalFP))
   print("TN: "+str(finalTN))
   print("FN: "+str(finalFN))
-  print("TPR: "+str(finalTP/(finalTP+finalFN)))
+  prec = finalTP/(finalTP+finalFP)
+  recall = finalTP/(finalTP+finalFN)
+  print("TPR: "+str(recall))
   print("FPR: "+str(finalFP/(finalFP+finalTN)))
-  print("Precision: "+str(finalTP/(finalTP+finalFP)))
+  print("Precision: "+str(prec))
   print("MCC: "+str(bestMCC))
+  print('F1:', str(2*(prec*recall)/(prec + recall)))
+
+
+
+
 
 runtime = time.time() - timer
 print("Runtime: ", runtime)
