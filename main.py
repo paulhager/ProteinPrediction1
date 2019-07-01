@@ -406,7 +406,7 @@ if crossValidation:
     fp = 0
     fn = 0
     tn = 0
-    for j in range(1000):
+    for j in range(30000):
       choice.append(random.choice(allscores))
     for i in choice:
       if i == 'tp':

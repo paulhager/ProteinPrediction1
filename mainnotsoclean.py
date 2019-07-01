@@ -267,7 +267,7 @@ def bootstrapper(resultpath):
   for j in range(1000):
     new_lab = []
     new_pred = []
-    for i in range(1000):
+    for i in range(30000):
       num = random.randint(0, len(labs) - 1)
       new_lab.append([float(labs[num])])
       new_pred.append(float(predictions[num]))
@@ -447,9 +447,9 @@ finalFP = fp
 finalTN = tn
 finalFN = fn
 
-distributionPlots(train)
+# distributionPlots(train)
 
-randomPredictor('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
+# randomPredictor('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
 
 stderrmcc, stderrprec, stderrrecall, stderrf1 = bootstrapper('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
 print('stderrMCC:', stderrmcc)
