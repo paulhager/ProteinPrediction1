@@ -9,7 +9,7 @@ import time
 import copy
 import randomDataset
 import matplotlib.pyplot as plt
-
+import numpy as np
 timer = time.time()
 printafterepoch = 2
 batchSize = 20
@@ -17,7 +17,7 @@ hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 3e-3
-epochs = 750
+epochs = 501
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
@@ -217,7 +217,7 @@ def validate(test_data,target, model, epoch, weight):
         print('Validation loss after epoch {} is {:.2}. F1-score is {:.4}'.format(epoch, loss, f1))
     return loss, f1
 
-def create_plots(val_loss_list,train_loss_list, f1_loss):
+def create_plots(val_loss_list,train_loss_list, f1_loss, pred_list, pred_val_list):
     plt.figure()
     plt.plot([x[1] for x in val_loss_list], [x[0] for x in val_loss_list],  label='Loss of the validation data')
     plt.plot([x[1] for x in train_loss_list], [x[0] for x in train_loss_list],  label='Loss of the train data')
@@ -232,7 +232,19 @@ def create_plots(val_loss_list,train_loss_list, f1_loss):
     plt.title('F1-score')
     plt.xlabel('Number of epochs')
     plt.ylabel('Model F1-score')
-    
+    plt.figure()
+    plt.hist(pred_list, bins='auto', label='Cutoff distribution testset', histtype = 'step')
+    plt.legend()
+    plt.title('Cutoff distribution')
+    plt.xlabel('Cutoff')
+    plt.ylabel('Frequency')
+    plt.figure()
+    plt.hist(pred_val_list, bins='auto', label='Cutoff distribution validationset', histtype = 'step')
+    plt.legend()
+    plt.title('Cutoff distribution')
+    plt.xlabel('Cutoff')
+    plt.ylabel('Frequency')
+   
 def calc_f1 (test_pred, test_labels):
   TP, FP, TN, FN = calc_roc_nowrite(test_pred, test_labels)
   recall = 0
@@ -351,6 +363,7 @@ if testmode == False:
   for t in range(epochs):
     loss_list = []
     f1_list = []
+    pred_list = []
     for i, data in enumerate(trainloader):
       train_batch, labels_batch = data
       y_pred = model(train_batch)
@@ -360,18 +373,20 @@ if testmode == False:
       optimizer.zero_grad()
       loss.backward()
       optimizer.step()
-      f1 = calc_f1(y_pred, labels_batch)
-      f1_list.append(f1)
-      
+      pred_list.extend(y_pred.detach().numpy())     
+      if t % printafterepoch == 0:
+          f1 = calc_f1(y_pred, labels_batch)
+          f1_list.append(f1)
+                      
     if t % printafterepoch == 0:
       train_loss = sum(loss_list)/len(loss_list)
       f1_ave = sum(f1_list)/len(f1_list)
       print('Training loss after epoch {} is {:.2}. F1-score is {:.4}'.format(t, train_loss,f1_ave))
-      val_loss, f1_val = validate(test_data,test_labels, model, t, weights[test_labels])
+      val_loss, f1_val, pred_val_list = validate(test_data,test_labels, model, t, weights[test_labels])
       val_loss_list.append((val_loss,t))
       train_loss_list.append((train_loss,t))
       f1_comp_list.append((f1_ave,f1_val, t))
-  create_plots(val_loss_list,train_loss_list, f1_comp_list)
+  create_plots(val_loss_list,train_loss_list, f1_comp_list,np.array(pred_list))
   torch.save(model.state_dict(), trainedModelPath)
 
 else:
