@@ -1,0 +1,14 @@
+presentation tips
+
+- bootstrapping: draw 30000 instead of 1000 -- done
+- add training score to overfitting plot
+- outlay --> outline -- done
+- no need to talk about snap files
+- include slide with dataset numbers, imbalance etc (BioLip reference)
+- also for testset 
+- slide 5: switch cuttoff comparisons (?), put cutoffs on slide (slide we used before)
+- scores for previous features
+- show less parameter optimization
+
+- show coverage, precision, ...
+- convert scores to percent (?)

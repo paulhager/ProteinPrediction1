@@ -10,6 +10,8 @@ import time
 import copy
 import randomDataset
 import matplotlib.pyplot as plt
+import random
+import statistics
 
 timer = time.time()
 batchSize = 1000
@@ -17,7 +19,7 @@ hiddenLayers = 200
 weightNonbinding = 0.4
 weightBinding = 0.6
 learning_rate = 3e-3
-epochs = 200
+epochs = 100
 device = torch.device('cpu')
 crossValidation = False
 predCutoff = 0.4
@@ -78,7 +80,6 @@ blosumScalingDict = {
   2 : 66,
   3 : 100
 }
-
 for key in blosum62scaled:
   if blosum62scaled[key] in blosumScalingDict:
     blosum62scaled[key] = blosumScalingDict[blosum62scaled[key]]
@@ -234,13 +235,103 @@ def distributionPlots(train):
   plt.title('Distribution single of Snap-scores')
   plt.xlabel('Snap-score')
   plt.ylabel('Occurences in the Dataset')
+  plt.tight_layout()
   g.savefig('DistributionofSnapscores.png')
   h = plt.figure(3)
-  plt.hist(blosumscores, bins=8)
+  bins = [-4, -3, -2, -1, 0, 1, 2, 3]
+  height = []
+  for i in bins:
+    z = blosumscores.count(i)
+    height.append(z)
+  plt.bar(bins, height)
   plt.title('Distribution of BLOSUM62-scores')
   plt.xlabel('BLOSUM62-score')
   plt.ylabel('Occurences in the Dataset')
+  plt.tight_layout()
   h.savefig('DistributionofBlosumscores.png')
+
+def bootstrapper(resultpath):
+  labs = []
+  predictions = []
+  with open(resultpath, 'r') as f:
+    for line in f:
+      line = line.split('\t')
+      labs.append(line[0])
+      predictions.append(line[1])
+  f.close()
+  allmccs = []
+  allprec = []
+  allrecall = []
+  allf1 = []
+  errorcount = 0
+  for j in range(1000):
+    new_lab = []
+    new_pred = []
+    for i in range(30000):
+      num = random.randint(0, len(labs) - 1)
+      new_lab.append([float(labs[num])])
+      new_pred.append(float(predictions[num]))
+    new_pred = torch.FloatTensor(new_pred)
+    tp, fp, tn, fn = calc_roc(new_pred, new_lab)
+    x = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    if x != 0:
+      mcc = (tp * tn - fp * fn) / x
+      allmccs.append(mcc)
+    else:
+      errorcount += 1
+    if tp + fp != 0:
+      prec = tp / (tp + fp)
+      allprec.append(prec)
+    if tp + fn != 0:
+      recall = tp / (tp + fn)
+      allrecall.append(recall)
+    if prec + recall != 0:
+      f1 = 2 * (prec * recall) / (prec + recall)
+      allf1.append(f1)
+  stderrmcc = statistics.stdev(allmccs)
+  stderrprec = statistics.stdev(allprec)
+  stderrrecall = statistics.stdev(allrecall)
+  stderrf1 = statistics.stdev(allf1)
+  print('bootstrapping errors:', errorcount)
+  return stderrmcc, stderrprec, stderrrecall, stderrf1
+
+def randomPredictor(testresultsPath):
+  labs = []
+  randpreds = []
+  tp = 0
+  tn = 0
+  fp = 0
+  fn = 0
+  ls = [0] * 92 + [1]*8
+  with open(testresultsPath, 'r') as f:
+    for line in f:
+      line = line.split('\t')
+      labs.append(int(line[0]))
+  f.close()
+  for i in range(len(labs)):
+    randpreds.append(random.choice(ls))
+  for j in range(len(labs)):
+    if labs[j] == randpreds[j]:
+      if labs[j] == 0:
+        tn += 1
+      else:
+        tp += 1
+    else:
+      if labs[j] == 0:
+        fp += 1
+      else:
+        fn += 1
+
+  print('Randompredictions')
+  print('TP:', tp)
+  print('FP:', fp)
+  print('TN:', tn)
+  print('FN:', fn)
+  x = math.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+  if x != 0:
+    mcc = (tp * tn - fp * fn) / x
+    print(mcc)
+  print('End randompredictions')
 
 def calc_roc(test_pred, test_labels, predCutoff = 0.4):
   tp = 0
@@ -355,6 +446,16 @@ finalTP = tp
 finalFP = fp
 finalTN = tn
 finalFN = fn
+
+# distributionPlots(train)
+
+# randomPredictor('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
+
+stderrmcc, stderrprec, stderrrecall, stderrf1 = bootstrapper('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
+print('stderrMCC:', stderrmcc)
+print('stderr Precision:', stderrprec)
+print('stderr Recall:', stderrrecall)
+print('Stderr F1:', stderrf1)
 
 with open('teststatistics.txt', 'w+') as stats:
   stats.write("TP:" + '\t' + str(finalTP) + '\n')
