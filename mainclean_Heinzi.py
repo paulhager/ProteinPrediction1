@@ -12,15 +12,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 timer = time.time()
 printafterepoch = 2
-batchSize = 20
-hiddenLayers = 200
-weightNonbinding = 0.4
-weightBinding = 0.6
-learning_rate = 3e-3
-epochs = 501
+batchSize = 500
+hiddenLayers = 20
+weightNonbinding = 0.1
+weightBinding = 0.9
+learning_rate = 5e-3
+epochs = 381
 device = torch.device('cpu')
 crossValidation = False
-predCutoff = 0.4
+predCutoff = 0.68
 momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
@@ -214,8 +214,9 @@ def validate(test_data,target, model, epoch, weight):
         test_pred = model(testDataTensors)
         loss = torch.nn.functional.binary_cross_entropy(test_pred, target, weight=weight)
         f1 = calc_f1(test_pred, test_labels)
+        pred_val_list = test_pred.detach().numpy()
         print('Validation loss after epoch {} is {:.2}. F1-score is {:.4}'.format(epoch, loss, f1))
-    return loss, f1
+    return loss, f1, pred_val_list
 
 def create_plots(val_loss_list,train_loss_list, f1_loss, pred_list, pred_val_list):
     plt.figure()
@@ -234,15 +235,11 @@ def create_plots(val_loss_list,train_loss_list, f1_loss, pred_list, pred_val_lis
     plt.ylabel('Model F1-score')
     plt.figure()
     plt.hist(pred_list, bins='auto', label='Cutoff distribution testset', histtype = 'step')
-    plt.legend()
-    plt.title('Cutoff distribution')
-    plt.xlabel('Cutoff')
-    plt.ylabel('Frequency')
-    plt.figure()
     plt.hist(pred_val_list, bins='auto', label='Cutoff distribution validationset', histtype = 'step')
+    plt.axvline(x=predCutoff, label='Prediction cutoff = {}'.format(predCutoff))
     plt.legend()
-    plt.title('Cutoff distribution')
-    plt.xlabel('Cutoff')
+    plt.title('Prediction distribution')
+    plt.xlabel('Prediction')
     plt.ylabel('Frequency')
    
 def calc_f1 (test_pred, test_labels):
@@ -386,7 +383,7 @@ if testmode == False:
       val_loss_list.append((val_loss,t))
       train_loss_list.append((train_loss,t))
       f1_comp_list.append((f1_ave,f1_val, t))
-  create_plots(val_loss_list,train_loss_list, f1_comp_list,np.array(pred_list))
+  create_plots(val_loss_list,train_loss_list, f1_comp_list,np.array(pred_list),pred_val_list)
   torch.save(model.state_dict(), trainedModelPath)
 
 else:
