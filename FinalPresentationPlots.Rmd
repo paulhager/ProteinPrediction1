@@ -18,19 +18,21 @@ setwd('/Users/paulhager/Documents/Uni/ProteinPrediction1/ProteinPrediction1/')
 Epochs versus MCC
 
 ```{r}
-epochMCCRaw <- read.csv('epochMCC.csv')
+epochMCCRaw <- read.csv('epochMCC_oldParams.csv')
 epochMCCDT <- as.data.table(epochMCCRaw)
 epochMCCDT
 
-sp <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=MCC, colour = "MCC"), show.legend = FALSE) 
+sp <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=MCC_TEST, colour = "MCC"), show.legend = FALSE) 
 sp
 # We could label where our grid search returns the best results with a vline, but it may be easier to just explain without
 #sp + geom_vline(xintercept=380)
 
 # We cen also include how the cutoff changed
-sp2 <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=Cutoff, colour = "Cutoff"), show.legend = FALSE)
+sp2 <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=MCC_TRAIN, colour = "Cutoff"))
 sp2
 
+both <- ggplot(epochMCCDT, aes(x=Epoch)) + geom_smooth(aes(y=MCC_TRAIN, colour = "Train"), show.legend = FALSE) + geom_smooth(aes(y=MCC_TEST, colour = "Test")) + labs(y="MCC") + theme(legend.justification = c(0.05,0.95), legend.position = c(0.05,0.95))
+both
 ```
 
 Grid Search
@@ -38,7 +40,7 @@ Grid Search
 ```{r}
 library(gridExtra)
 library(dplyr) 
-paramGridSearchRaw <- read.csv('allParams_both.csv')
+paramGridSearchRaw <- read.csv('allParameters.csv')
 paramGridSearchDT <- as.data.table(paramGridSearchRaw)
 paramGridSearchDT
 base <- ggplot(paramGridSearchDT, aes(y=MCC))
@@ -60,4 +62,6 @@ epochs
 momentum
 cutoff
 grid.arrange(batchSize, hiddenNodes, weightNonBinding, weightBinding, learningRate, epochs, momentum, cutoff)
+
+mccHist <- ggplot(paramGridSearchDT, aes(MCC)) + geom_histogram(color="darkblue", fill="lightblue") + labs(title="Hyperparameter Gridsearch MCC Histogram", y="Count") + theme(plot.title = element_text(hjust = 0.5))
 ```
