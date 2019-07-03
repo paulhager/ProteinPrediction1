@@ -10,17 +10,19 @@ import copy
 import randomDataset
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.ndimage.filters import gaussian_filter1d
+
 timer = time.time()
 printafterepoch = 2
 batchSize = 500
 hiddenLayers = 20
 weightNonbinding = 0.1
-weightBinding = 0.9
+weightBinding = 0.5
 learning_rate = 5e-3
-epochs = 381
+epochs = 380
 device = torch.device('cpu')
 crossValidation = False
-predCutoff = 0.68
+predCutoff = 0.57
 momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
@@ -213,26 +215,33 @@ def validate(test_data,target, model, epoch, weight):
         testDataTensors = torch.tensor(test_data, dtype=torch.float)
         test_pred = model(testDataTensors)
         loss = torch.nn.functional.binary_cross_entropy(test_pred, target, weight=weight)
-        f1 = calc_f1(test_pred, test_labels)
+        f1, mcc = calc_f1(test_pred, test_labels)
         pred_val_list = test_pred.detach().numpy()
-        print('Validation loss after epoch {} is {:.2}. F1-score is {:.4}'.format(epoch, loss, f1))
-    return loss, f1, pred_val_list
+        print('Validation loss after epoch {} is {:.4f}. F1-score is {:.4f}'.format(epoch, loss, f1))
+    return loss, f1, pred_val_list,mcc
 
-def create_plots(val_loss_list,train_loss_list, f1_loss, pred_list, pred_val_list):
+def create_plots(val_loss_list,train_loss_list, f1_loss, pred_list, pred_val_list, mcc_list):
     plt.figure()
-    plt.plot([x[1] for x in val_loss_list], [x[0] for x in val_loss_list],  label='Loss of the validation data')
-    plt.plot([x[1] for x in train_loss_list], [x[0] for x in train_loss_list],  label='Loss of the train data')
+    plt.plot([x[1] for x in val_loss_list], gaussian_filter1d([x[0].item() for x in val_loss_list], sigma=2),  label='Loss of the validation data')
+    plt.plot([x[1] for x in train_loss_list], gaussian_filter1d([x[0].item() for x in train_loss_list], sigma=2),  label='Loss of the train data')
     plt.legend()
     plt.title('Loss')
     plt.xlabel('Number of epochs')
     plt.ylabel('Model loss')
     plt.figure()
-    plt.plot([x[2] for x in f1_loss], [x[0] for x in f1_loss],  label='F1-score of the validation data')
-    plt.plot([x[2] for x in f1_loss], [x[1] for x in f1_loss],  label='F1-score of the train data')
+    plt.plot([x[2] for x in f1_loss], gaussian_filter1d([x[0] for x in f1_loss], sigma=2),  label='F1-score of the validation data')
+    plt.plot([x[2] for x in f1_loss], gaussian_filter1d([x[1] for x in f1_loss], sigma=2),  label='F1-score of the train data')
     plt.legend()
     plt.title('F1-score')
     plt.xlabel('Number of epochs')
     plt.ylabel('Model F1-score')
+    plt.figure()
+    plt.plot([x[2] for x in mcc_list], gaussian_filter1d([x[0] for x in mcc_list], sigma=2),  label='MCC of the validation data')
+    plt.plot([x[2] for x in mcc_list], gaussian_filter1d([x[1] for x in mcc_list], sigma=2),  label='MCC of the train data')
+    plt.legend()
+    plt.title('MCC')
+    plt.xlabel('Number of epochs')
+    plt.ylabel('Model MCC development over epochs')
     plt.figure()
     plt.hist(pred_list, bins='auto', label='Cutoff distribution testset', histtype = 'step')
     plt.hist(pred_val_list, bins='auto', label='Cutoff distribution validationset', histtype = 'step')
@@ -243,17 +252,21 @@ def create_plots(val_loss_list,train_loss_list, f1_loss, pred_list, pred_val_lis
     plt.ylabel('Frequency')
    
 def calc_f1 (test_pred, test_labels):
-  TP, FP, TN, FN = calc_roc_nowrite(test_pred, test_labels)
+  TP, FP, TN, FN = calc_roc_nowrite(test_pred, test_labels, predCutoff)
   recall = 0
   prec = 0
   f1 = 0
+  mcc = 0
   if (TP + FP) != 0:
     prec = TP/(TP + FP)
   if (TP + FN) != 0:
     recall = TP/(TP + FN)
   if (prec + recall) != 0:
     f1 = 2*(prec*recall)/(prec + recall)
-  return f1
+  x = math.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
+  if x != 0:
+    mcc = (TP * TN - FP * FN)/x
+  return f1,mcc
     
 def calc_roc(test_pred, test_labels, predCutoff = 0.4):
   tp = 0
@@ -327,6 +340,12 @@ model = torch.nn.Sequential(
           torch.nn.Sigmoid()
         ).to(device)
 
+#model = torch.nn.Sequential(
+#          torch.nn.Conv1d(D_in, 10, kernel_size = 3, stride = 1, padding = 1),
+#          torch.nn.Sigmoid(),
+#          torch.nn.Conv1d(10, 1, kernel_size = 5, stride = 1, padding = 2),
+#          torch.nn.Sigmoid(),
+#        ).to(device)
 
 weights = torch.tensor([weightNonbinding, weightBinding], device=device)
 loss_fn = torch.nn.BCELoss(reduction='mean')
@@ -357,33 +376,38 @@ if testmode == False:
   val_loss_list = []
   train_loss_list = []
   f1_comp_list = []
+  mcc_comp_list = []
+
   for t in range(epochs):
     loss_list = []
     f1_list = []
     pred_list = []
+    mcc_list = []
     for i, data in enumerate(trainloader):
       train_batch, labels_batch = data
       y_pred = model(train_batch)
       loss_fn.weight = weights[labels_batch.long()]
-      loss = loss_fn(y_pred, labels_batch)
+      loss = loss_fn(y_pred.squeeze(), labels_batch)
       loss_list.append(loss)
       optimizer.zero_grad()
       loss.backward()
       optimizer.step()
       pred_list.extend(y_pred.detach().numpy())     
       if t % printafterepoch == 0:
-          f1 = calc_f1(y_pred, labels_batch)
+          f1,mcc = calc_f1(y_pred, labels_batch)
           f1_list.append(f1)
-                      
+          mcc_list.append(mcc)
     if t % printafterepoch == 0:
       train_loss = sum(loss_list)/len(loss_list)
       f1_ave = sum(f1_list)/len(f1_list)
-      print('Training loss after epoch {} is {:.2}. F1-score is {:.4}'.format(t, train_loss,f1_ave))
-      val_loss, f1_val, pred_val_list = validate(test_data,test_labels, model, t, weights[test_labels])
+      mcc_ave = sum(mcc_list)/len(mcc_list)
+      print('Training loss after epoch {} is {:.4f}. F1-score is {:.4f}'.format(t, train_loss,f1_ave))
+      val_loss, f1_val, pred_val_list,mcc_val = validate(test_data,test_labels, model, t, weights[test_labels])
       val_loss_list.append((val_loss,t))
       train_loss_list.append((train_loss,t))
       f1_comp_list.append((f1_ave,f1_val, t))
-  create_plots(val_loss_list,train_loss_list, f1_comp_list,np.array(pred_list),pred_val_list)
+      mcc_comp_list.append((mcc_val,mcc_ave, t))
+  create_plots(val_loss_list,train_loss_list, f1_comp_list, np.array(pred_list) ,pred_val_list ,mcc_comp_list)
   torch.save(model.state_dict(), trainedModelPath)
 
 else:
