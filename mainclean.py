@@ -7,19 +7,18 @@ import math
 from Bio.SubsMat import MatrixInfo as matrices
 import time
 import copy
-import randomDataset
 import matplotlib.pyplot as plt
 
 timer = time.time()
-batchSize = 1000
-hiddenLayers = 200
-weightNonbinding = 0.4
-weightBinding = 0.6
-learning_rate = 3e-3
-epochs = 200
+batchSize = 500
+hiddenLayers = 20
+weightNonbinding = 0.1
+weightBinding = 0.5
+learning_rate = 5e-3
+epochs = 380
 device = torch.device('cpu')
 crossValidation = False
-predCutoff = 0.4
+predCutoff = 0.57
 momentum=0.9
 #device = torch.device('cuda')
 blosumScalar = 1
@@ -54,8 +53,8 @@ if randomData == None:
   randomMode = False
 else:
   randomMode = randomData
-blosum62 = copy.deepcopy(matrices.blosum62)
-blosum62scaled = copy.deepcopy(matrices.blosum62)
+blosum62 = copy.deepcopy(matrices.blosum45)
+blosum62scaled = copy.deepcopy(matrices.blosum45)
 blosumCutoffsDict = {
   -4 : 90,
   -3 : 80,
@@ -68,10 +67,11 @@ blosumCutoffsDict = {
 }
 
 blosumScalingDict = {
-  -4 : -100,
-  -3 : -75,
-  -2 : -50,
-  -1 : -25,
+  -5 : -100,
+  -4 : -80,
+  -3 : -60,
+  -2 : -40,
+  -1 : -20,
   0 : 0,
   1 : 33,
   2 : 66,
@@ -257,9 +257,6 @@ elif not randomMode:
   # train = with cutoff
   # train2 = raw data (blosum & SNAP2)
   train = train2
-else:
-  rand = randomDataset.random_Dataset()
-  labels, train = rand.TrainSet()
 
 print("Finished preparing data")
 
@@ -281,10 +278,10 @@ optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=momen
 
 if testmode == False:
   if not randomMode:
-    train_data = train[:100000]
-    train_labels = labels[:100000]
-    test_data = train[100000:]
-    test_labels = labels[100000:]
+    train_data = train # [:100000]
+    train_labels = labels # [:100000]
+    test_data = train # [100000:]
+    test_labels = labels # [100000:]
     # for random Dataset, ignore otherwise
     # rand = randomDataset.random_Dataset()
     # test_labels, test_data = rand.TestSet()
@@ -321,7 +318,7 @@ if testmode == False:
 else:
   test_data = train
   test_labels = labels
-  model.load_state_dict(torch.load(trainedModelPath))
+  model.load_state_dict(torch.load(trainedmodel))
 
 testDataTensors = torch.tensor(test_data, dtype=torch.float)
 test_pred = model(testDataTensors)
