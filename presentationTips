@@ -7,11 +7,11 @@ x no need to talk about snap files
 x include slide with dataset numbers, imbalance etc (BioLip reference)
 - also for testset 
 x slide 5: switch cuttoff comparisons (not necessary), put cutoffs on slide (slide we used before)
-- scores for previous features
+x scores for previous features
 x show less parameter optimization
 
 - show coverage (?), precision, ...
-xconvert scores to percent (?)
+x convert scores to percent (?)
 
 - ToDo
 x done
