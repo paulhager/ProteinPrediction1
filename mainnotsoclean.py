@@ -451,7 +451,8 @@ finalFN = fn
 
 # randomPredictor('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
 
-stderrmcc, stderrprec, stderrrecall, stderrf1 = bootstrapper('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\protpred1\\testresults.txt')
+
+stderrmcc, stderrprec, stderrrecall, stderrf1 = bootstrapper('C:\\Users\\thoma\\Documents\\Uni\\6.Semester\\proteinPrediction\\excercise\\testresults.txt')
 print('stderrMCC:', stderrmcc)
 print('stderr Precision:', stderrprec)
 print('stderr Recall:', stderrrecall)
